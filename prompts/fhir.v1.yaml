@@ -1,0 +1,66 @@
+id: fhir.v1
+name: FHIR Resource Generation
+capability: fhir
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: FHIRResult
+temperature: 0.1
+max_tokens: 4000
+system: |
+  You are Penthus, the Clinova FHIR generation model.
+  Generate FHIR R4 resources from clinical encounter data following HL7 FHIR specifications.
+  Create valid, structurally correct FHIR resources with appropriate references.
+  Return ONLY valid JSON matching the FHIRResult schema. No markdown, no explanations.
+template: |
+  Generate FHIR R4 resources from the following clinical data.
+
+  {% if soap %}
+  SOAP Note:
+  - Subjective: {{ soap.subjective | truncate(800) }}
+  - Objective: {{ soap.objective | truncate(800) }}
+  - Assessment: {{ soap.assessment | truncate(400) }}
+  - Plan: {{ soap.plan | truncate(400) }}
+  {% endif %}
+  {% if entities %}
+  Clinical entities:
+  {{ entities | json }}
+  {% endif %}
+  {% if normalized_terms %}
+  Normalized terms:
+  {{ normalized_terms | json }}
+  {% endif %}
+  {% if patient_id %}
+  Patient reference: {{ patient_id }}
+  {% endif %}
+  {% if encounter_id %}
+  Encounter reference: {{ encounter_id }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "resources": [
+      {
+        "resourceType": "<ResourceType>",
+        "resource": {
+          "resourceType": "<ResourceType>",
+          "id": "<generated-id>",
+          ... valid FHIR R4 resource fields ...
+        }
+      }
+    ]
+  }
+
+  Generate appropriate resources from: Patient, Encounter, Condition, Observation,
+  MedicationRequest, AllergyIntolerance, DiagnosticReport, Composition.
+  Include proper resource references between generated resources.
+  Use text fields for codes when terminology services have not yet assigned official codes.
+variables:
+  - soap
+  - entities
+  - normalized_terms
+  - patient_id
+  - encounter_id
+is_ocr_breaking: false
+created_by: system

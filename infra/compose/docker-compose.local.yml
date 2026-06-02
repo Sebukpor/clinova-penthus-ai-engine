@@ -1,0 +1,287 @@
+# ============================================
+# Clinova Penthus AI Engine - Local Stack
+# Docker Compose for local development
+# ============================================
+
+version: "3.8"
+
+services:
+  # PostgreSQL - Clinical data store
+  postgres:
+    image: postgres:16-alpine
+    container_name: clinova-postgres
+    environment:
+      POSTGRES_USER: penthus
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: clinova
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penthus -d clinova"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - clinova-network
+
+  # Redis - Cache layer
+  redis:
+    image: redis:7-alpine
+    container_name: clinova-redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinova-network
+
+  # MinIO - Object storage (S3-compatible)
+  minio:
+    image: minio/minio:latest
+    container_name: clinova-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - clinova-network
+
+  # Create MinIO bucket
+  minio-init:
+    image: minio/minio:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10 &&
+      mc config host add myminio http://minio:9000 minioadmin minioadmin &&
+      mc mb myminio/clinova-documents || true
+      "
+    networks:
+      - clinova-network
+
+  # vLLM - Penthus Model Service
+  # NOTE: Requires GPU. For CPU-only testing, comment out deploy section
+  # and use VLLM_REMOTE_URL instead.
+  vllm:
+    build:
+      context: ../..
+      dockerfile: infra/docker/vllm.Dockerfile
+      args:
+        - HF_TOKEN=${HF_TOKEN:-}
+        - SERVED_MODEL_NAME=penthus-1.2-alpha-4b
+    container_name: clinova-vllm
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=0
+    ports:
+      - "8001:8000"
+    volumes:
+      - vllm_model_cache:/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - clinova-network
+    profiles:
+      - gpu  # Only start when --profile gpu is specified
+
+  # Mock vLLM for CPU-only development
+  vllm-mock:
+    image: python:3.12-slim
+    container_name: clinova-vllm-mock
+    command: >
+      sh -c "
+      pip install fastapi uvicorn &&
+      python -c '
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.post(\"\"/v1/chat/completions\")
+async def chat_completion(request: dict):
+    return {
+        \"choices\": [{\"message\": {\"content\": \"{\\\"raw_text\\\": \\\"Mock OCR result\\\"}\"}, \"finish_reason\": \"stop\"}],
+        \"usage\": {\"prompt_tokens\": 100, \"completion_tokens\": 50},
+        \"model\": \"penthus-mock\"
+    }
+
+@app.get(\"\"/health\")
+async def health():
+    return {\"status\": \"healthy\"}
+
+@app.get(\"\"/models\")
+async def models():
+    return {\"object\": \"list\", \"data\": []}
+' > /tmp/mock_server.py &&
+      uvicorn /tmp/mock_server:app --host 0.0.0.0 --port 8000
+      "
+    ports:
+      - "8001:8000"
+    networks:
+      - clinova-network
+    profiles:
+      - cpu  # Only start when --profile cpu is specified
+
+  # Clinova Penthus API
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: clinova-api
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=postgresql+asyncpg://penthus:changeme@postgres:5432/clinova
+      - REDIS_URL=redis://redis:6379/0
+      - VLLM_BASE_URL=http://vllm:8000/v1
+      - VLLM_MODEL=penthus-1.2-alpha-4b
+      - OBJECT_STORAGE_ENDPOINT=http://minio:9000
+      - OBJECT_STORAGE_ACCESS_KEY=minioadmin
+      - OBJECT_STORAGE_SECRET_KEY=minioadmin
+      - OBJECT_STORAGE_BUCKET=clinova-documents
+      - TERMINOLOGY_GATEWAY_URL=http://terminology-mock:8080
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - API_RELOAD=true
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - clinova-network
+    volumes:
+      - ../../app:/app/app:ro
+      - ../../prompts:/app/prompts:ro
+    command: >
+      sh -c "
+      alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    profiles:
+      - ""  # Default profile
+
+  # Terminology Gateway Mock (for local dev)
+  terminology-mock:
+    image: python:3.12-slim
+    container_name: clinova-terminology-mock
+    command: >
+      sh -c "
+      pip install fastapi uvicorn &&
+      python -c '
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.post(\"\"/search\")
+async def search(request: dict):
+    terms = request.get(\"terms\", [])
+    system = request.get(\"system\", \"unknown\")
+    candidates = []
+    for term in terms:
+        candidates.append({
+            \"code\": f\"mock-code-{term[:10]}\",
+            \"display\": term.title(),
+            \"score\": 0.95,
+            \"source\": f\"mock-{system}\"
+        })
+    return {\"candidates\": candidates, \"system\": system}
+
+@app.get(\"\"/health\")
+async def health():
+    return {\"status\": \"healthy\"}
+' > /tmp/term_server.py &&
+      uvicorn /tmp/term_server:app --host 0.0.0.0 --port 8080
+      "
+    ports:
+      - "8080:8080"
+    networks:
+      - clinova-network
+
+  # Prometheus - Metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clinova-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    networks:
+      - clinova-network
+
+  # Grafana - Metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clinova-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - clinova-network
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: clinova-otel
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    volumes:
+      - ./otel-collector-config.yml:/etc/otelcol/config.yaml:ro
+    command: ["--config", "/etc/otelcol/config.yaml"]
+    networks:
+      - clinova-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  vllm_model_cache:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  clinova-network:
+    driver: bridge
+    name: clinova-network

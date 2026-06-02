@@ -1,0 +1,174 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clinova-api
+  namespace: clinova
+  labels:
+    app: clinova-api
+    tier: api
+    component: penthus-engine
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: clinova-api
+  template:
+    metadata:
+      labels:
+        app: clinova-api
+        tier: api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/api/v1/metrics"
+    spec:
+      serviceAccountName: clinova-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: iad.ocir.io/NAMESPACE/clinova/penthus-api:1.2.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: clinova-penthus-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: REDIS_URL
+            - name: VLLM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: VLLM_BASE_URL
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: VLLM_API_KEY
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: SECRET_KEY
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: HF_TOKEN
+            - name: OBJECT_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: OBJECT_STORAGE_ACCESS_KEY
+            - name: OBJECT_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clinova-penthus-secrets
+                  key: OBJECT_STORAGE_SECRET_KEY
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/readiness
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clinova-api
+  namespace: clinova
+  labels:
+    app: clinova-api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: clinova-api
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: clinova-api
+  namespace: clinova
+  annotations:
+    # OCI IAM policy for pod identity
+    # iam.oraclecloud.com/oci-identity: "ocid1.dynamicgroup.oc1..xxxx"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: clinova-api-hpa
+  namespace: clinova
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: clinova-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

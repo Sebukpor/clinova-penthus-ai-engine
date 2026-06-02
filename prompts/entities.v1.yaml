@@ -1,0 +1,40 @@
+id: entities.v1
+name: Clinical Entity Extraction
+capability: entities
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: EntityResult
+temperature: 0.1
+max_tokens: 2000
+system: |
+  You are Penthus, the Clinova clinical entity extraction model.
+  Identify and extract all clinical entities from the provided text with high precision.
+  Classify each entity by type and provide confidence scores.
+  Normalize terms where possible without assigning standardized codes.
+  Return ONLY valid JSON matching the EntityResult schema. No markdown, no explanations.
+template: |
+  Extract all clinical entities from the following medical text.
+
+  Source text:
+  {{ raw_text | truncate(3000) }}
+
+  Entity types to identify: symptom, diagnosis, finding, medication, procedure, allergy, vital_sign, lab_result.
+
+  Return JSON with this exact structure:
+  {
+    "entities": [
+      {
+        "text": "<exact text from source>",
+        "type": "<symptom|diagnosis|finding|medication|procedure|allergy|vital_sign|lab_result>",
+        "normalized_text": "<canonical normalized form or null>",
+        "confidence": 0.95,
+        "source_span": "<surrounding context>"
+      }
+    ]
+  }
+variables:
+  - raw_text
+is_ocr_breaking: false
+created_by: system

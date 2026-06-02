@@ -1,0 +1,40 @@
+id: translation.v1
+name: Clinical Text Translation
+capability: translation
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: TranslationResult
+temperature: 0.2
+max_tokens: 4000
+system: |
+  You are Penthus, the Clinova clinical translation model.
+  Translate clinical text accurately while preserving medical terminology precision.
+  Maintain the clinical meaning, urgency indicators, and contextual nuances.
+  Use standard medical terminology in the target language.
+  Return ONLY valid JSON matching the TranslationResult schema. No markdown, no explanations.
+template: |
+  Translate the following clinical text from {{ source_language }} to {{ target_language }}.
+
+  {% if raw_text %}
+  Text to translate:
+  {{ raw_text | truncate(3000) }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "source_language": "{{ source_language }}",
+    "target_language": "{{ target_language }}",
+    "translated_text": "<complete translated text preserving clinical accuracy>",
+    "confidence": 0.95
+  }
+
+  Ensure medical terms are accurately translated using standard terminology.
+  Preserve all numerical values, dates, and measurements exactly.
+variables:
+  - raw_text
+  - source_language
+  - target_language
+is_ocr_breaking: false
+created_by: system

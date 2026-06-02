@@ -1,0 +1,43 @@
+id: soap.v1
+name: SOAP Note Generation
+capability: soap
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: SOAPResult
+temperature: 0.2
+max_tokens: 2000
+system: |
+  You are Penthus, the Clinova clinical documentation model.
+  Generate structured SOAP notes from clinical encounter text following standard medical documentation practices.
+  Be thorough, accurate, and clinically precise. Include all relevant details.
+  Return ONLY valid JSON matching the SOAPResult schema. No markdown, no explanations.
+template: |
+  Generate a complete SOAP note from the following clinical text.
+
+  Source text:
+  {{ raw_text | truncate(3000) }}
+
+  {% if language %}
+  Language: {{ language }}
+  {% endif %}
+  {% if specialty %}
+  Specialty: {{ specialty }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "subjective": "<patient-reported symptoms, history, complaints>",
+    "objective": "<examination findings, vital signs, lab results, measurements>",
+    "assessment": "<clinical assessment, differential diagnosis, clinical impression>",
+    "plan": "<treatment plan, medications, follow-up instructions, referrals>")
+  }
+
+  Ensure each section is comprehensive and clinically accurate.
+variables:
+  - raw_text
+  - language
+  - specialty
+is_ocr_breaking: false
+created_by: system

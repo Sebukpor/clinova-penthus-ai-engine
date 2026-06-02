@@ -1,0 +1,512 @@
+# Clinova Penthus AI Engine
+
+**DAS MedHub Clinical AI Platform - AI-Powered Clinical Documentation and Intelligence**
+
+Penthus is the Clinical AI Engine powering the Clinova platform. It uses a single vLLM-hosted fine-tuned Qwen 3.5 4B model to power OCR, SOAP generation, entity extraction, summarization, translation, FHIR extraction, documentation gap detection, and clinical normalization. External terminology services perform official clinical coding.
+
+---
+
+## Architecture Principles
+
+- **One model deployment only** - All AI capabilities through a single vLLM endpoint
+- **OCR is the shared foundational layer** - Every image-based workflow resolves OCR first
+- **OCR results are persisted and reused** - No duplicate OCR execution
+- **Stateless compute with durable external state** - PostgreSQL, Redis, object storage
+- **The AI model normalizes but never codes** - SNOMED CT, ICD-11 assigned by terminology services
+- **vLLM is internal only** - No public model endpoint
+- **All outputs are validated JSON** - Pydantic schema validation on every response
+- **Every inference is auditable** - Full inference logging
+- **Every workflow is tenant-isolated** - Multi-tenant by design
+- **PHI is encrypted in transit and at rest** - HIPAA/GDPR aligned
+
+---
+
+## System Topology
+
+```
+Doctor Tablet App / API Clients
+  |
+  v
+API Gateway (OCI Load Balancer)
+  |
+  v
+FastAPI Clinical AI Orchestrator
+  |
+  +---> OCR Dependency Resolver
+  |       +---> PostgreSQL (OCR results)
+  |       +---> Redis (OCR cache)
+  |       +---> vLLM Penthus Model (if needed)
+  |
+  +---> Prompt Manager (YAML + DB registry)
+  |
+  +---> vLLM Penthus Model Service
+  |       Model: Sebukpor/medical-document-understanding-v2-fixed
+  |       Served via: vLLM OpenAI-compatible API
+  |
+  +---> Clinical Context Store (PostgreSQL + Redis)
+  |
+  +---> Terminology Gateway Client (interface)
+  |       +---> External SNOMED CT / ICD-11 / RxNorm / LOINC services
+  |
+  +---> FHIR Mapper & Validator
+  |       +---> FHIR R4 resources
+  |
+  +---> Audit & Inference Logging (PostgreSQL)
+```
+
+---
+
+## Technology Stack
+
+| Component | Technology |
+|-----------|------------|
+| Web Framework | FastAPI + Pydantic v2 |
+| Database | PostgreSQL 16 + SQLAlchemy 2 + Alembic |
+| Cache | Redis 7 |
+| Model Serving | vLLM (OpenAI-compatible API) |
+| Base Model | Qwen 3.5 4B fine-tuned for medical documents |
+| Object Storage | OCI Object Storage / MinIO |
+| Observability | OpenTelemetry + Prometheus + Grafana |
+| Container | Docker + Kubernetes (OKE) |
+| Cloud | Oracle Cloud Infrastructure (OCI) |
+
+---
+
+## Quick Start - Local Development
+
+### Prerequisites
+
+- Python 3.12+
+- Docker & Docker Compose
+- NVIDIA GPU (optional, for vLLM - mock available for CPU)
+- 8GB+ RAM, 4+ CPU cores
+
+### 1. Clone and Setup
+
+```bash
+git clone <repo-url>
+cd clinova-penthus-ai-engine
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# or: .venv\Scripts\activate  # Windows
+
+pip install -e ".[dev]"
+```
+
+### 2. Environment Configuration
+
+```bash
+cp .env.example .env
+# Edit .env with your settings
+```
+
+### 3. Start Infrastructure Services
+
+```bash
+# Start PostgreSQL, Redis, MinIO, mock services
+docker compose -f infra/compose/docker-compose.local.yml up -d postgres redis minio terminology-mock
+
+# Create MinIO bucket (first run only)
+docker compose -f infra/compose/docker-compose.local.yml up minio-init
+```
+
+### 4. Database Migrations
+
+```bash
+alembic upgrade head
+```
+
+### 5. Start API Server
+
+```bash
+# Option A: Development mode with auto-reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Option B: Using Docker Compose (with mock vLLM for CPU)
+docker compose -f infra/compose/docker-compose.local.yml --profile cpu up -d
+
+# Option C: Using Docker Compose (with GPU vLLM)
+docker compose -f infra/compose/docker-compose.local.yml --profile gpu up -d
+```
+
+### 6. Verify Installation
+
+```bash
+curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/api/v1/readiness
+```
+
+---
+
+## API Endpoints
+
+### Clinical AI Workflows
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/ocr` | Extract text and entities from documents |
+| POST | `/api/v1/soap` | Generate SOAP notes |
+| POST | `/api/v1/entities` | Extract clinical entities |
+| POST | `/api/v1/normalization` | Normalize clinical terms |
+| POST | `/api/v1/summary` | Generate clinical summaries |
+| POST | `/api/v1/gaps` | Detect documentation gaps |
+| POST | `/api/v1/translation` | Translate clinical text |
+| POST | `/api/v1/snomed` | Map to SNOMED CT candidates |
+| POST | `/api/v1/icd` | Map to ICD-11 candidates |
+| POST | `/api/v1/fhir` | Generate FHIR R4 resources |
+
+### Utility Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/encounters/{id}/context` | Get clinical context |
+| GET | `/api/v1/documents/{id}/ocr` | Get OCR result |
+| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/readiness` | Readiness check |
+| GET | `/api/v1/metrics` | Prometheus metrics |
+
+---
+
+## API Usage Examples
+
+### Request Format
+
+All endpoints accept the standard request envelope:
+
+```json
+{
+  "tenant_id": "tenant_001",
+  "encounter_id": "enc_001",
+  "document_id": "doc_001",
+  "patient_id": "pat_001",
+  "image": "base64-encoded-image-or-object-storage-uri",
+  "text": null,
+  "language": "en",
+  "metadata": {
+    "source": "doctor_tablet",
+    "specialty": "general_medicine"
+  }
+}
+```
+
+### OCR Example
+
+```bash
+curl -X POST http://localhost:8000/api/v1/ocr \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "tenant_id": "tenant_001",
+    "encounter_id": "enc_001",
+    "document_id": "doc_001",
+    "image": "data:image/jpeg;base64,/9j/4AAQ...",
+    "language": "en"
+  }'
+```
+
+### SOAP Generation Example
+
+```bash
+curl -X POST http://localhost:8000/api/v1/soap \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "tenant_id": "tenant_001",
+    "encounter_id": "enc_001",
+    "text": "Patient has fever for 3 days and dry cough. No chest pain. Vitals: T 38.5C, HR 92, BP 120/80, SpO2 97%.",
+    "language": "en"
+  }'
+```
+
+### Response Format
+
+```json
+{
+  "request_id": "req_001",
+  "tenant_id": "tenant_001",
+  "encounter_id": "enc_001",
+  "document_id": "doc_001",
+  "workflow": "soap",
+  "model": {
+    "repo_id": "Sebukpor/medical-document-understanding-v2-fixed",
+    "prompt_version": "soap.v1",
+    "model_version": "penthus-1.2-alpha-4b"
+  },
+  "result": {
+    "subjective": "Patient reports fever for 3 days and dry cough.",
+    "objective": "Temperature 38.5C, HR 92, BP 120/80, SpO2 97%.",
+    "assessment": "Suspected upper respiratory infection.",
+    "plan": "Rest, hydration, acetaminophen. Follow up in 3 days."
+  },
+  "warnings": [],
+  "latency_ms": 1200,
+  "ocr_reused": false
+}
+```
+
+---
+
+## Model Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Model Repository | `Sebukpor/medical-document-understanding-v2-fixed` |
+| Architecture | qwen3_5 |
+| Parameters | ~4.54B |
+| Serving Engine | vLLM |
+| Internal Model Name | `penthus-1.2-alpha-4b` |
+| Internal URL | `http://penthus-vllm:8000/v1` |
+| Data Type | bfloat16 |
+| Max Model Length | 8192 |
+| GPU Memory Utilization | 90% |
+| Prefix Caching | Enabled |
+
+---
+
+## OCR Dependency Resolution
+
+OCR is the foundational layer. Every endpoint receiving an image resolves OCR first:
+
+1. Check PostgreSQL for existing OCR result
+2. If missing, check Redis cache
+3. If missing, execute OCR prompt through vLLM
+4. Persist OCR result to PostgreSQL
+5. Cache OCR result in Redis (30-day TTL)
+6. Update clinical context
+7. Continue with requested workflow
+
+**Guarantee**: OCR is never executed twice for the same content hash unless explicitly forced.
+
+---
+
+## Prompt Management
+
+Prompts are stored as YAML files in `prompts/` and loaded at startup. Production supports both file bootstrapping and database-managed active versions.
+
+Available prompts:
+- `ocr.v1.yaml` - Document text extraction
+- `soap.v1.yaml` - SOAP note generation
+- `entities.v1.yaml` - Clinical entity extraction
+- `normalization.v1.yaml` - Term normalization
+- `summary.v1.yaml` - Clinical summarization
+- `gaps.v1.yaml` - Documentation gap detection
+- `translation.v1.yaml` - Clinical translation
+- `fhir.v1.yaml` - FHIR resource generation
+
+---
+
+## Production Deployment - OCI
+
+### Prerequisites
+
+- OCI CLI configured
+- Terraform 1.5+
+- kubectl
+- Access to OCI Tenancy
+
+### Deployment Steps
+
+1. **Configure Terraform variables**:
+```bash
+cd infra/terraform/oci
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your OCI credentials
+```
+
+2. **Initialize and apply**:
+```bash
+terraform init
+terraform plan
+terraform apply
+```
+
+3. **Configure kubectl**:
+```bash
+oci ce cluster create-kubeconfig --cluster-id <cluster-ocid> --file $HOME/.kube/config --region us-ashburn-1
+```
+
+4. **Deploy application**:
+```bash
+kubectl apply -f infra/k8s/configmap.yaml
+kubectl apply -f infra/k8s/secrets.yaml  # Configure secrets first
+kubectl apply -f infra/k8s/
+```
+
+5. **Verify deployment**:
+```bash
+kubectl get pods -n clinova
+kubectl get svc -n clinova
+```
+
+---
+
+## Project Structure
+
+```
+clinova-penthus-ai-engine/
+|── app/
+|   |── api/                    # FastAPI route modules
+|   |   |── deps.py             # Dependency injection
+|   |   |── routes_*.py         # Endpoint handlers
+|   |── core/                   # Core framework
+|   |   |── config.py           # Application settings
+|   |   |── errors.py           # Exception hierarchy
+|   |   |── logging.py          # Structured logging
+|   |   |── observability.py    # Metrics & tracing
+|   |   |── security.py         # Auth & RBAC
+|   |── context/                # Clinical context & cache
+|   |   |── store.py            # Context persistence
+|   |   |── cache.py            # Redis cache client
+|   |── db/                     # Database layer
+|   |   |── models.py           # SQLAlchemy models
+|   |   |── session.py          # Async session
+|   |   |── repositories.py     # Repository pattern
+|   |   |── migrations/         # Alembic migrations
+|   |── fhir/                   # FHIR interoperability
+|   |   |── mapper.py           # FHIR resource mapping
+|   |   |── validator.py        # FHIR validation
+|   |── llm/                    # vLLM client
+|   |   |── vllm_client.py     # OpenAI-compatible client
+|   |   |── messages.py         # Message formatting
+|   |   |── json_repair.py      # JSON repair utilities
+|   |── orchestrator/           # AI orchestration
+|   |   |── engine.py           # Main orchestrator
+|   |   |── workflows.py        # Workflow definitions
+|   |   |── ocr_dependency.py   # OCR resolver
+|   |   |── workflow_types.py   # Workflow types
+|   |── prompts/                # Prompt management
+|   |   |── manager.py          # Prompt loader
+|   |   |── renderer.py         # Jinja2 renderer
+|   |   |── registry.py         # YAML registry
+|   |── schemas/                # Pydantic schemas
+|   |   |── requests.py         # Request envelopes
+|   |   |── responses.py        # Response envelopes
+|   |   |── *.py                # Domain schemas
+|   |── services/               # Business services
+|   |   |── audit_service.py
+|   |   |── inference_log_service.py
+|   |   |── document_service.py
+|   |   |── object_storage.py
+|   |── terminology/            # Terminology gateway client
+|   |   |── client.py           # Gateway interface
+|   |   |── schemas.py          # Terminology schemas
+|   |── workers/                # Background jobs
+|   |   |── jobs.py
+|   |   |── queue.py
+|   |── main.py                 # FastAPI entry point
+|── prompts/                    # YAML prompt files
+|   |── *.v1.yaml
+|── infra/                      # Infrastructure
+|   |── docker/                 # Dockerfiles
+|   |── compose/                # Docker Compose
+|   |── k8s/                    # Kubernetes manifests
+|   |── terraform/              # OCI Terraform
+|── tests/                      # Test suite
+|── pyproject.toml              # Project config
+|── alembic.ini                 # Alembic config
+|── .env.example                # Environment template
+|── README.md                   # This file
+```
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=html
+
+# Run specific test file
+pytest tests/test_ocr_dependency.py -v
+
+# Run with markers
+pytest -m unit
+pytest -m integration
+```
+
+### Test Coverage
+
+| Test File | Coverage |
+|-----------|----------|
+| `test_ocr_dependency.py` | OCR deduplication, cache, single-execution |
+| `test_workflows.py` | Workflow routing, dependency resolution |
+| `test_prompt_manager.py` | Prompt loading, rendering, versions |
+| `test_vllm_client.py` | Retry logic, timeout handling |
+| `test_context_store.py` | Context persistence, merging |
+| `test_tenant_isolation.py` | Multi-tenant isolation |
+| `test_routes.py` | Endpoint routing, validation |
+
+---
+
+## Security
+
+- **Authentication**: JWT tokens + API keys
+- **Authorization**: RBAC with role-permission mapping
+- **Tenant Isolation**: Enforced at all layers
+- **PHI Protection**: Masked in logs, encrypted at rest
+- **Audit Logging**: All PHI access tracked
+- **Network**: vLLM internal-only, TLS 1.3
+- **Secrets**: OCI Vault integration
+
+### Roles
+
+| Role | Permissions |
+|------|-------------|
+| `system_admin` | Full access |
+| `clinical_admin` | Clinical workflows + admin |
+| `physician` | All clinical workflows |
+| `nurse` | Limited clinical workflows |
+| `api_service` | Service-to-service |
+| `read_only` | Context read only |
+
+---
+
+## Observability
+
+### Metrics
+
+- `clinova_workflow_latency_ms` - Per-workflow latency
+- `clinova_vllm_latency_ms` - vLLM inference latency
+- `clinova_vllm_tokens_total` - Token usage
+- `clinova_ocr_cache_hit_total` - OCR cache hit/miss
+- `clinova_terminology_cache_hit_total` - Terminology cache
+- `clinova_workflow_errors_total` - Error rates
+- `clinova_validation_failures_total` - Validation failures
+- `clinova_tenant_requests_total` - Per-tenant traffic
+
+### Tracing
+
+OpenTelemetry traces across:
+- Gateway request
+- Auth
+- Context resolution
+- OCR resolution
+- Prompt rendering
+- vLLM chat completion
+- Schema validation
+- Persistence
+- Terminology lookup
+
+### Dashboards
+
+- Clinical workflow latency by endpoint
+- OCR cache hit ratio
+- vLLM throughput and token latency
+- GPU utilization
+- Endpoint error rate
+- Tenant traffic
+
+---
+
+## License
+
+Proprietary - DAS MedHub
+
+---
+
+## Support
+
+For support, contact: engineering@dasmedhub.com

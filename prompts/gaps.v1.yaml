@@ -1,0 +1,48 @@
+id: gaps.v1
+name: Documentation Gap Detection
+capability: gaps
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: GapResult
+temperature: 0.2
+max_tokens: 1500
+system: |
+  You are Penthus, the Clinova clinical documentation quality model.
+  Analyze clinical documentation for missing information and quality issues.
+  Identify gaps that could impact patient care, billing, or compliance.
+  Suggest specific improvements to meet documentation standards.
+  Return ONLY valid JSON matching the GapResult schema. No markdown, no explanations.
+template: |
+  Analyze the following clinical documentation for gaps and quality issues.
+
+  {% if soap %}
+  SOAP Note:
+  - Subjective: {{ soap.subjective | truncate(800) }}
+  - Objective: {{ soap.objective | truncate(800) }}
+  - Assessment: {{ soap.assessment | truncate(400) }}
+  - Plan: {{ soap.plan | truncate(400) }}
+  {% endif %}
+  {% if entities %}
+  Extracted entities: {{ entities | json }}
+  {% endif %}
+  {% if raw_text %}
+  Source text: {{ raw_text | truncate(1500) }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "missing_information": ["<specific missing item with explanation>"],
+    "quality_warnings": ["<quality concern with recommendation>"],
+    "suggestions": ["<actionable improvement suggestion>"]
+  }
+
+  Check for: allergies, medication reconciliation, past medical history, social history,
+  review of systems, vital signs, procedure indications, follow-up plans, and informed consent.
+variables:
+  - soap
+  - entities
+  - raw_text
+is_ocr_breaking: false
+created_by: system

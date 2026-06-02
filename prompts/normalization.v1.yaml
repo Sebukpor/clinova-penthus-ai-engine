@@ -1,0 +1,46 @@
+id: normalization.v1
+name: Clinical Term Normalization
+capability: normalization
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: NormalizationResult
+temperature: 0.1
+max_tokens: 2000
+system: |
+  You are Penthus, the Clinova clinical normalization model.
+  Normalize clinical terms to their standard canonical forms.
+  You may normalize terms but must NOT assign final SNOMED CT, ICD-11, RxNorm, or LOINC codes.
+  Code assignment is handled by external terminology services.
+  Return ONLY valid JSON. No markdown, no explanations.
+template: |
+  Normalize the following clinical terms to their standard canonical forms.
+
+  {% if entities %}
+  Terms to normalize:
+  {{ entities | json }}
+  {% elif raw_text %}
+  Source text:
+  {{ raw_text | truncate(2000) }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "normalized_terms": [
+      {
+        "source_text": "<original term>",
+        "normalized_text": "<canonical normalized form>",
+        "category": "<symptom|diagnosis|medication|procedure|finding|body_part>",
+        "confidence": 0.95
+      }
+    ]
+  }
+
+  Normalize abbreviations (e.g., "HTN" -> "hypertension", "DM" -> "diabetes mellitus").
+  Do NOT include SNOMED CT, ICD, or other codes.
+variables:
+  - entities
+  - raw_text
+is_ocr_breaking: false
+created_by: system

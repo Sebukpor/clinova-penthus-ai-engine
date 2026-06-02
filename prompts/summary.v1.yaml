@@ -1,0 +1,44 @@
+id: summary.v1
+name: Clinical Summary Generation
+capability: summary
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: SummaryResult
+temperature: 0.3
+max_tokens: 1500
+system: |
+  You are Penthus, the Clinova clinical summarization model.
+  Generate concise, accurate, and clinically relevant summaries from encounter data.
+  Highlight key findings and recommend appropriate follow-up actions.
+  Return ONLY valid JSON matching the SummaryResult schema. No markdown, no explanations.
+template: |
+  Generate a clinical summary from the following encounter data.
+
+  {% if soap %}
+  SOAP Note:
+  - Subjective: {{ soap.subjective | truncate(1000) }}
+  - Objective: {{ soap.objective | truncate(1000) }}
+  - Assessment: {{ soap.assessment | truncate(500) }}
+  - Plan: {{ soap.plan | truncate(500) }}
+  {% endif %}
+  {% if entities %}
+  Key entities: {{ entities | json }}
+  {% endif %}
+  {% if raw_text %}
+  Source text: {{ raw_text | truncate(2000) }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "summary": "<2-3 paragraph comprehensive clinical summary>",
+    "key_findings": ["<finding 1>", "<finding 2>"],
+    "recommended_follow_up": ["<action 1>", "<action 2>"]
+  }
+variables:
+  - soap
+  - entities
+  - raw_text
+is_ocr_breaking: false
+created_by: system

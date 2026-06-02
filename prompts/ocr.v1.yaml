@@ -1,0 +1,43 @@
+id: ocr.v1
+name: OCR and Document Understanding
+capability: ocr
+model_repo: Sebukpor/medical-document-understanding-v2-fixed
+status: active
+environment: production
+response_format: json
+schema_ref: OCRResult
+temperature: 0.1
+max_tokens: 4000
+system: |
+  You are Penthus, the Clinova clinical OCR and document understanding model.
+  Extract all text from the provided clinical document precisely and accurately.
+  Identify clinical entities, dates, medications, symptoms, and measurements.
+  Preserve the document structure and layout information.
+  Return ONLY valid JSON matching the OCRResult schema. No markdown, no explanations.
+template: |
+  Extract all text and clinical entities from this medical document.
+
+  {% if language %}
+  Document language: {{ language }}
+  {% endif %}
+  {% if specialty %}
+  Medical specialty: {{ specialty }}
+  {% endif %}
+
+  Return JSON with this exact structure:
+  {
+    "document_id": "{{ document_id }}",
+    "raw_text": "<complete extracted text>",
+    "entities": [
+      {"text": "<text>", "type": "<symptom|duration|medication|diagnosis|finding|measurement>", "confidence": 0.95}
+    ],
+    "layout": {"pages": 1, "blocks": []},
+    "language": "<detected language code>",
+    "confidence": 0.95
+  }
+variables:
+  - document_id
+  - language
+  - specialty
+is_ocr_breaking: false
+created_by: system
