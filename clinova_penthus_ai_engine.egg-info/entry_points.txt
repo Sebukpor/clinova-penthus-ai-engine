@@ -1,0 +1,2 @@
+[console_scripts]
+penthus-api = app.main:start
