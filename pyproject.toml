@@ -73,6 +73,10 @@ dependencies = [
     "minio>=7.2.0",
     # FHIR
     "fhir.resources>=7.1.0",
+    # Image Processing (for OCR preprocessing)
+    "Pillow>=10.2.0",
+    "numpy>=1.26.0",
+    "scikit-image>=0.22.0",
 ]
 
 [project.optional-dependencies]
