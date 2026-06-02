@@ -125,6 +125,7 @@ class ClinicalAIOrchestrator:
                     language=request.language,
                     force_rerun=request.force_rerun_ocr,
                     request_id=request_id,
+                    mime_type=request.mime_type,
                 )
                 raw_text = ocr_result.get("raw_text", "") if ocr_result else request.text
 

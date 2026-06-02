@@ -28,6 +28,10 @@ class ClinicalRequest(BaseModel):
         default=None,
         description="Base64-encoded image or object storage URI"
     )
+    mime_type: Optional[str] = Field(
+        default=None,
+        description="MIME type of the image (e.g., 'image/png', 'image/jpeg')"
+    )
     text: Optional[str] = Field(
         default=None,
         description="Plain text input (alternative to image)"

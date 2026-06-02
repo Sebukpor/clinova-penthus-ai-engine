@@ -16,6 +16,7 @@ from app.llm.messages import build_messages
 from app.llm.vllm_client import VLLMClient
 from app.prompts.manager import PromptManager
 from app.schemas.ocr import OCRResult as OCRResultSchema
+from app.services.image_preprocessor import get_preprocessor, PreprocessingMetadata
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,7 @@ class OCRDependencyResolver:
         language: str = "en",
         force_rerun: bool = False,
         request_id: Optional[str] = None,
+        mime_type: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], bool]:
         """
         Resolve OCR for a document.
@@ -71,6 +73,7 @@ class OCRDependencyResolver:
             language: Document language
             force_rerun: Force OCR re-execution
             request_id: Request correlation ID
+            mime_type: MIME type of the image (e.g., "image/png")
 
         Returns:
             Tuple of (OCR result dict, was_reused boolean)
@@ -128,6 +131,7 @@ class OCRDependencyResolver:
             text=text,
             language=language,
             request_id=request_id,
+            mime_type=mime_type,
         )
 
         # 4. Persist OCR result
@@ -151,8 +155,53 @@ class OCRDependencyResolver:
         text: Optional[str] = None,
         language: str = "en",
         request_id: Optional[str] = None,
+        mime_type: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Execute OCR prompt through vLLM."""
+        """Execute OCR prompt through vLLM with image preprocessing."""
+        # Preprocess image if provided
+        preprocessed_image = image
+        preprocessing_metadata = None
+        
+        if image and mime_type:
+            try:
+                preprocessor = get_preprocessor()
+                
+                # Decode base64 image if needed
+                image_bytes = preprocessor.decode_from_base64(image)
+                
+                # Preprocess the image
+                result = await preprocessor.preprocess(
+                    image_data=image_bytes,
+                    mime_type=mime_type,
+                )
+                
+                if result.success:
+                    # Encode preprocessed image back to base64
+                    preprocessed_image = preprocessor.encode_to_base64(result.image_bytes)
+                    preprocessing_metadata = result.metadata.to_dict()
+                    
+                    logger.info(
+                        "image_preprocessing_completed",
+                        document_id=document_id,
+                        metadata=preprocessing_metadata,
+                        request_id=request_id,
+                    )
+                else:
+                    logger.warning(
+                        "image_preprocessing_failed_continuing_with_original",
+                        document_id=document_id,
+                        error=result.error_message,
+                        request_id=request_id,
+                    )
+            except Exception as e:
+                logger.error(
+                    "image_preprocessing_error",
+                    document_id=document_id,
+                    error=str(e),
+                    request_id=request_id,
+                )
+                # Continue with original image on error
+        
         # Get prompt
         prompt_data = self.prompts.render_prompt(
             capability="ocr",
@@ -168,22 +217,26 @@ class OCRDependencyResolver:
         )
 
         # If image provided, add it to user message
-        if image:
+        if preprocessed_image:
             from app.llm.messages import add_image_to_message
             user_msg = messages[-1]
             # Strip data URI prefix if present
-            b64_data = image
-            if ";base64," in image:
-                b64_data = image.split(";base64,")[1]
-            elif "," in image:
-                b64_data = image.split(",")[1]
+            b64_data = preprocessed_image
+            if ";base64," in preprocessed_image:
+                b64_data = preprocessed_image.split(";base64,")[1]
+            elif "," in preprocessed_image:
+                b64_data = preprocessed_image.split(",")[1]
             add_image_to_message(user_msg, b64_data)
 
-        # Call vLLM
+        # Call vLLM with OCR-specific parameters
         response = await self.vllm.chat_completion(
             messages=messages,
-            temperature=prompt_data["temperature"],
-            max_tokens=prompt_data["max_tokens"],
+            temperature=prompt_data.get("temperature", 0.0),
+            max_tokens=prompt_data.get("max_tokens", 6048),
+            top_p=prompt_data.get("top_p", 0.80),
+            top_k=prompt_data.get("top_k", 10),
+            presence_penalty=prompt_data.get("presence_penalty", 0.0),
+            repetition_penalty=prompt_data.get("repetition_penalty", 1.03),
             workflow="ocr",
             request_id=request_id,
         )
@@ -198,6 +251,11 @@ class OCRDependencyResolver:
             result = ocr_data.model_dump()
             # Ensure document_id is set
             result["document_id"] = document_id
+            
+            # Add preprocessing metadata if available
+            if preprocessing_metadata:
+                result["preprocessing_metadata"] = preprocessing_metadata
+            
             return result
         except Exception as e:
             logger.error(
@@ -215,6 +273,7 @@ class OCRDependencyResolver:
                 "language": language,
                 "confidence": 0.0,
                 "_parse_error": str(e),
+                "preprocessing_metadata": preprocessing_metadata,
             }
 
     async def _persist_ocr(
