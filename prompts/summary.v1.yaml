@@ -7,7 +7,7 @@ environment: production
 response_format: json
 schema_ref: SummaryResult
 temperature: 0.3
-max_tokens: 1500
+max_tokens: 8096
 system: |
   You are Penthus, the Clinova clinical summarization model.
   Generate concise, accurate, and clinically relevant summaries from encounter data.

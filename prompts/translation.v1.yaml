@@ -7,7 +7,7 @@ environment: production
 response_format: json
 schema_ref: TranslationResult
 temperature: 0.2
-max_tokens: 4000
+max_tokens: 4096
 system: |
   You are Penthus, the Clinova clinical translation model.
   Translate clinical text accurately while preserving medical terminology precision.
