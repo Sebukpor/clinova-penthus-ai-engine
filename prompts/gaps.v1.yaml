@@ -7,13 +7,12 @@ environment: production
 response_format: json
 schema_ref: GapResult
 temperature: 0.2
-max_tokens: 4086
+max_tokens: 8192
 system: |
-  You are Penthus, the Clinova clinical documentation quality model.
-  Analyze clinical documentation for missing information and quality issues.
-  Identify gaps that could impact patient care, billing, or compliance.
-  Suggest specific improvements to meet documentation standards.
-  Return ONLY valid JSON matching the GapResult schema. No markdown, no explanations.
+  You are Penthus, Clinova's clinical documentation quality model.
+  Analyze clinical documentation for missing critical information and quality issues that could affect care, billing, or compliance.
+  Identify specific gaps and provide targeted, actionable recommendations to improve documentation quality.
+  Output ONLY valid JSON matching the GapResult schema. Do not include markdown or explanatory commentary.
 template: |
   Analyze the following clinical documentation for gaps and quality issues.
 
@@ -40,6 +39,7 @@ template: |
 
   Check for: allergies, medication reconciliation, past medical history, social history,
   review of systems, vital signs, procedure indications, follow-up plans, and informed consent.
+  For each missing item, add a `severity` tag: `high`, `medium`, or `low` to indicate potential clinical impact.
 variables:
   - soap
   - entities

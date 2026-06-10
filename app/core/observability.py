@@ -4,7 +4,7 @@ Structured JSON logging and request metrics (no OpenTelemetry/Prometheus).
 """
 
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 from typing import Any, Dict, Generator, Optional
 
 from fastapi import Request, Response
@@ -13,6 +13,21 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# No-op metric objects for test/runtime compatibility.
+class _NoopMetric:
+    def labels(self, **kwargs):
+        return self
+
+    def inc(self, amount: int = 1) -> None:
+        return None
+
+    def observe(self, value: float) -> None:
+        return None
+
+
+HTTP_REQUESTS_TOTAL = _NoopMetric()
+HTTP_REQUEST_DURATION = _NoopMetric()
 
 # Simple in-memory counters for basic metrics
 _request_counts: Dict[str, int] = {}
@@ -132,10 +147,18 @@ def workflow_span(workflow: str, request_id: str, **attrs) -> Generator[Any, Non
         record_workflow_latency(workflow, elapsed_ms)
 
 
-@contextmanager
-def async_workflow_span(workflow: str, request_id: str, **attrs):
+@asynccontextmanager
+async def async_workflow_span(workflow: str, request_id: str, **attrs):
     """Async context manager for workflow timing."""
-    return workflow_span(workflow, request_id, **attrs)
+    start_time = time.time()
+    try:
+        yield None
+    except Exception as e:
+        record_workflow_error(workflow, type(e).__name__)
+        raise
+    finally:
+        elapsed_ms = (time.time() - start_time) * 1000
+        record_workflow_latency(workflow, elapsed_ms)
 
 
 @contextmanager

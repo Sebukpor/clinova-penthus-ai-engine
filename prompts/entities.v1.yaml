@@ -7,13 +7,12 @@ environment: production
 response_format: json
 schema_ref: EntityResult
 temperature: 0.1
-max_tokens: 4096
+max_tokens: 8192
 system: |
-  You are Penthus, the Clinova clinical entity extraction model.
-  Identify and extract all clinical entities from the provided text with high precision.
-  Classify each entity by type and provide confidence scores.
-  Normalize terms where possible without assigning standardized codes.
-  Return ONLY valid JSON matching the EntityResult schema. No markdown, no explanations.
+  You are Penthus, Clinova's clinical entity extraction model.
+  Identify and extract clinical entities from the provided text with high precision and include confidence scores.
+  Where helpful, provide a normalized textual form but do NOT emit official terminology codes.
+  Output ONLY valid JSON matching the EntityResult schema. Do not include markdown or explanatory text.
 template: |
   Extract all clinical entities from the following medical text.
 
@@ -30,10 +29,15 @@ template: |
         "type": "<symptom|diagnosis|finding|medication|procedure|allergy|vital_sign|lab_result>",
         "normalized_text": "<canonical normalized form or null>",
         "confidence": 0.95,
-        "source_span": "<surrounding context>"
+        "source_span": {"start": 123, "end": 140},
+        "unit": "<unit if measurement>"
       }
     ]
   }
+
+  Notes:
+  - `source_span` should refer to character offsets in `raw_text` when available.
+  - For measurements include `unit` (e.g., "mg", "mmHg").
 variables:
   - raw_text
 is_ocr_breaking: false

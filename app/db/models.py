@@ -82,7 +82,7 @@ class Encounter(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    metadata_: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, name="metadata")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Relationships
@@ -109,7 +109,7 @@ class Document(Base):
     mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    metadata_: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, name="metadata")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     # Relationships
@@ -332,13 +332,13 @@ class PromptVersion(Base):
     response_format: Mapped[str] = mapped_column(String(20), nullable=False, default="json")
     schema_ref: Mapped[str] = mapped_column(String(100), nullable=False)
     temperature: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0.1)
-    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=1200)
+    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=4096)
     system_message: Mapped[str] = mapped_column(Text, nullable=False)
     template: Mapped[str] = mapped_column(Text, nullable=False)
     variables: Mapped[List[str]] = mapped_column(JSONB, default=list)
     is_ocr_breaking: Mapped[bool] = mapped_column(default=False)
     created_by: Mapped[str] = mapped_column(String(100), nullable=False)
-    metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    metadata_: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, name="metadata")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
@@ -363,7 +363,7 @@ class InferenceLog(Base):
     output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     validation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    metadata_: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, name="metadata")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
@@ -431,7 +431,7 @@ class AuditLog(Base):
     ip_address: Mapped[Optional[str]] = mapped_column(INET, nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     request_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    metadata: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    metadata_: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict, name="metadata")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (

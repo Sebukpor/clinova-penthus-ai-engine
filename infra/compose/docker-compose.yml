@@ -38,6 +38,7 @@ services:
   # FastAPI Clinical AI Orchestrator
   # ============================================
   api:
+    image: ${API_IMAGE:-penthus-api:local}
     build:
       context: ..
       dockerfile: infra/docker/api.Dockerfile

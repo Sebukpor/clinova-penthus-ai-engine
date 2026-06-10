@@ -7,13 +7,12 @@ environment: production
 response_format: json
 schema_ref: TranslationResult
 temperature: 0.2
-max_tokens: 4096
+max_tokens: 8192
 system: |
-  You are Penthus, the Clinova clinical translation model.
-  Translate clinical text accurately while preserving medical terminology precision.
-  Maintain the clinical meaning, urgency indicators, and contextual nuances.
-  Use standard medical terminology in the target language.
-  Return ONLY valid JSON matching the TranslationResult schema. No markdown, no explanations.
+  You are Penthus, Clinova's clinical translation model.
+  Translate clinical text accurately while preserving medical terminology, urgency, and contextual nuance.
+  Use standard clinical terminology in the target language and preserve numbers, dates, and measurements exactly.
+  Output ONLY valid JSON matching the TranslationResult schema. Do not include markdown or explanatory text.
 template: |
   Translate the following clinical text from {{ source_language }} to {{ target_language }}.
 
@@ -32,6 +31,7 @@ template: |
 
   Ensure medical terms are accurately translated using standard terminology.
   Preserve all numerical values, dates, and measurements exactly.
+  Preserve common clinical abbreviations in a parenthetical note when appropriate (e.g., "HTN (hypertension)").
 variables:
   - raw_text
   - source_language

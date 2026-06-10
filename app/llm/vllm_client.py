@@ -72,7 +72,7 @@ class VLLMClient:
         self,
         messages: List[Dict[str, str]],
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int = 10200,
         response_format: Optional[Dict[str, str]] = None,
         workflow: str = "unknown",
         request_id: Optional[str] = None,

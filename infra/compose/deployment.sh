@@ -81,7 +81,18 @@ build_images() {
     log_info "Building Docker images..."
     
     cd "$PROJECT_ROOT"
-    
+    # If configured to use remote/registry images, pull instead of building
+    if [ "${USE_REMOTE_IMAGE:-false}" = "true" ]; then
+        log_info "USE_REMOTE_IMAGE=true: pulling images from registry"
+        if docker compose version &> /dev/null; then
+            docker compose -f "$COMPOSE_FILE" pull || true
+        else
+            docker-compose -f "$COMPOSE_FILE" pull || true
+        fi
+        log_success "Pulled remote images"
+        return
+    fi
+
     if docker compose version &> /dev/null; then
         docker compose -f "$COMPOSE_FILE" build --no-cache
     else

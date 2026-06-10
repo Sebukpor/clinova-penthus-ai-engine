@@ -7,12 +7,12 @@ environment: production
 response_format: json
 schema_ref: FHIRResult
 temperature: 0.1
-max_tokens: 8096
+max_tokens: 10200
 system: |
-  You are Penthus, the Clinova FHIR generation model.
-  Generate FHIR R4 resources from clinical encounter data following HL7 FHIR specifications.
-  Create valid, structurally correct FHIR resources with appropriate references.
-  Return ONLY valid JSON matching the FHIRResult schema. No markdown, no explanations.
+  You are Penthus, Clinova's FHIR generation model.
+  Generate valid FHIR R4 resources from the supplied clinical data, following HL7 FHIR structure and reference rules.
+  Ensure resources are structurally correct and references between resources are consistent.
+  Output ONLY valid JSON matching the FHIRResult schema. Do not include markdown or explanatory text.
 template: |
   Generate FHIR R4 resources from the following clinical data.
 
@@ -56,6 +56,8 @@ template: |
   MedicationRequest, AllergyIntolerance, DiagnosticReport, Composition.
   Include proper resource references between generated resources.
   Use text fields for codes when terminology services have not yet assigned official codes.
+  When a terminology code is not available, include the human-readable text in the code display and leave numeric code fields empty.
+  Use ISO 8601 timestamps for dates. Ensure resource `id` and `resourceType` are present for each generated resource.
 variables:
   - soap
   - entities

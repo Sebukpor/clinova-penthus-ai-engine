@@ -50,7 +50,7 @@ class PromptRegistry:
         data.setdefault("environment", "production")
         data.setdefault("response_format", "json")
         data.setdefault("temperature", 0.1)
-        data.setdefault("max_tokens", 1200)
+        data.setdefault("max_tokens", 4096)
         data.setdefault("variables", [])
         data.setdefault("is_ocr_breaking", False)
         data.setdefault("created_by", "system")

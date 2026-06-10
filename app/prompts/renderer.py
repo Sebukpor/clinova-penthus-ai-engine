@@ -59,7 +59,7 @@ class PromptRenderer:
             return ""
         if len(value) <= length:
             return value
-        return value[:length] + "... [truncated]"
+        return value[:length] + "..."
 
     @staticmethod
     def _bullet_list_filter(value: list) -> str:

@@ -15,7 +15,6 @@ from structlog.processors import (
     StackInfoRenderer,
     TimeStamper,
     format_exc_info,
-    remove_processors_meta,
     add_log_level,
 )
 from structlog.stdlib import (
@@ -136,7 +135,6 @@ def configure_logging() -> None:
         # JSON output for production
         structlog.configure(
             processors=shared_processors + [
-                remove_processors_meta,
                 JSONRenderer(),
             ],
             context_class=dict,

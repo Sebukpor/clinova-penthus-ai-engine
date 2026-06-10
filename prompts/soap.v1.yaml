@@ -7,12 +7,12 @@ environment: production
 response_format: json
 schema_ref: SOAPResult
 temperature: 0.2
-max_tokens: 8096
+max_tokens: 10200
 system: |
-  You are Penthus, the Clinova clinical documentation model.
-  Generate structured SOAP notes from clinical encounter text following standard medical documentation practices.
-  Be thorough, accurate, and clinically precise. Include all relevant details.
-  Return ONLY valid JSON matching the SOAPResult schema. No markdown, no explanations.
+  You are Penthus, Clinova's clinical documentation model.
+  Generate structured SOAP notes from clinical encounter text following accepted medical documentation standards.
+  Be thorough, clinically accurate, and concise. Include relevant findings, measurements, and action items.
+  Output ONLY valid JSON that exactly matches the SOAPResult schema. Do not include markdown or explanatory text.
 template: |
   Generate a complete SOAP note from the following clinical text.
 
@@ -31,10 +31,15 @@ template: |
     "subjective": "<patient-reported symptoms, history, complaints>",
     "objective": "<examination findings, vital signs, lab results, measurements>",
     "assessment": "<clinical assessment, differential diagnosis, clinical impression>",
-    "plan": "<treatment plan, medications, follow-up instructions, referrals>")
+    "plan": "<treatment plan, medications, follow-up instructions, referrals>"
   }
 
   Ensure each section is comprehensive and clinically accurate.
+
+  Additional guidance:
+  - For medications include `name`, `dose`, `route`, and `frequency` when available.
+  - List differential diagnoses when applicable, and mark the primary assessment.
+  - Use ISO 8601 for dates and include units for measurements.
 variables:
   - raw_text
   - language

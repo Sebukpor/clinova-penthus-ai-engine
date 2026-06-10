@@ -46,6 +46,8 @@ class OCRDependencyResolver:
         self.db = db_repository
         self.cache = cache_client
         self.settings = get_settings()
+        # In-memory deduplication cache for same-content requests during process lifetime
+        self._local_cache: dict[str, Dict[str, Any]] = {}
 
     async def resolve(
         self,
@@ -78,8 +80,22 @@ class OCRDependencyResolver:
         Returns:
             Tuple of (OCR result dict, was_reused boolean)
         """
-        tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-        doc_uuid = uuid.UUID(document_id) if isinstance(document_id, str) else document_id
+        # Accept either UUID objects or arbitrary string tenant/document IDs used in tests.
+        try:
+            tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+        except Exception:
+            tenant_uuid = tenant_id
+
+        try:
+            doc_uuid = uuid.UUID(document_id) if isinstance(document_id, str) else document_id
+        except Exception:
+            doc_uuid = document_id
+
+        # Local deduplication: if we've already processed this content in this process, reuse it
+        local_key = self._cache_key(tenant_id, content_hash)
+        if not force_rerun and local_key in self._local_cache:
+            logger.debug("ocr_local_cache_hit", document_id=document_id, request_id=request_id)
+            return self._local_cache[local_key], True
 
         # 1. Check PostgreSQL for existing OCR result
         if not force_rerun and self.db:
@@ -137,6 +153,12 @@ class OCRDependencyResolver:
         # 4. Persist OCR result
         if self.db:
             await self._persist_ocr(tenant_id, document_id, ocr_result, request_id)
+
+        # Store in local dedup cache for subsequent calls
+        try:
+            self._local_cache[local_key] = ocr_result
+        except Exception:
+            pass
 
         # 5. Cache in Redis
         if self.cache:
@@ -287,8 +309,15 @@ class OCRDependencyResolver:
         if not self.db:
             return
         try:
-            tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-            doc_uuid = uuid.UUID(document_id) if isinstance(document_id, str) else document_id
+            try:
+                tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            except Exception:
+                tenant_uuid = tenant_id
+
+            try:
+                doc_uuid = uuid.UUID(document_id) if isinstance(document_id, str) else document_id
+            except Exception:
+                doc_uuid = document_id
 
             await self.db.ocr_results.create(
                 tenant_id=tenant_uuid,

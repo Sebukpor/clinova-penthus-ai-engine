@@ -222,7 +222,7 @@ def upgrade() -> None:
         sa.Column('response_format', sa.String(20), nullable=False, server_default='json'),
         sa.Column('schema_ref', sa.String(100), nullable=False),
         sa.Column('temperature', sa.Numeric(3, 2), nullable=False, server_default='0.1'),
-        sa.Column('max_tokens', sa.Integer(), nullable=False, server_default='1200'),
+        sa.Column('max_tokens', sa.Integer(), nullable=False, server_default='4096'),
         sa.Column('system_message', sa.Text(), nullable=False),
         sa.Column('template', sa.Text(), nullable=False),
         sa.Column('variables', postgresql.JSONB(), server_default='[]'),

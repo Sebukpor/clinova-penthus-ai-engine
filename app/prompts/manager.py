@@ -30,7 +30,7 @@ class PromptVersion:
         self.response_format = data.get("response_format", "json")
         self.schema_ref = data.get("schema_ref", "")
         self.temperature = float(data.get("temperature", 0.1))
-        self.max_tokens = int(data.get("max_tokens", 1200))
+        self.max_tokens = int(data.get("max_tokens", 4096))
         self.system_message = data.get("system", "")
         self.template = data.get("template", "")
         self.variables = data.get("variables", [])

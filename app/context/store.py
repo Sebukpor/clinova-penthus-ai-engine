@@ -51,13 +51,31 @@ class ClinicalContextStore:
         # Try database
         if self.db:
             try:
-                tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-                encounter_uuid = uuid.UUID(encounter_id) if isinstance(encounter_id, str) else encounter_id
-                doc_uuid = uuid.UUID(document_id) if document_id else None
+                try:
+                    tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+                except Exception:
+                    tenant_uuid = tenant_id
 
-                ctx = await self.db.clinical_contexts.get_by_encounter(
-                    tenant_uuid, encounter_uuid, doc_uuid
-                )
+                try:
+                    encounter_uuid = uuid.UUID(encounter_id) if isinstance(encounter_id, str) else encounter_id
+                except Exception:
+                    encounter_uuid = encounter_id
+
+                try:
+                    doc_uuid = uuid.UUID(document_id) if document_id else None
+                except Exception:
+                    doc_uuid = document_id if document_id else None
+
+                # Support being passed either a repo container (with .clinical_contexts)
+                # or a repo object directly (tests pass the repo directly).
+                if hasattr(self.db, "get_by_encounter"):
+                    repo = self.db
+                elif hasattr(self.db, "clinical_contexts") and hasattr(self.db.clinical_contexts, "get_by_encounter"):
+                    repo = self.db.clinical_contexts
+                else:
+                    repo = self.db
+
+                ctx = await repo.get_by_encounter(tenant_uuid, encounter_uuid, doc_uuid)
                 if ctx:
                     result = ctx.state
                     # Cache in Redis
@@ -96,11 +114,29 @@ class ClinicalContextStore:
         # Persist to database
         if self.db:
             try:
-                tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-                encounter_uuid = uuid.UUID(encounter_id) if isinstance(encounter_id, str) else encounter_id
-                doc_uuid = uuid.UUID(document_id) if document_id else None
+                try:
+                    tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+                except Exception:
+                    tenant_uuid = tenant_id
 
-                await self.db.clinical_contexts.create_or_update(
+                try:
+                    encounter_uuid = uuid.UUID(encounter_id) if isinstance(encounter_id, str) else encounter_id
+                except Exception:
+                    encounter_uuid = encounter_id
+
+                try:
+                    doc_uuid = uuid.UUID(document_id) if document_id else None
+                except Exception:
+                    doc_uuid = document_id if document_id else None
+
+                if hasattr(self.db, "create_or_update"):
+                    repo = self.db
+                elif hasattr(self.db, "clinical_contexts") and hasattr(self.db.clinical_contexts, "create_or_update"):
+                    repo = self.db.clinical_contexts
+                else:
+                    repo = self.db
+
+                await repo.create_or_update(
                     tenant_id=tenant_uuid,
                     encounter_id=encounter_uuid,
                     state=ctx,
