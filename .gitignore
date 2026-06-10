@@ -1,50 +1,36 @@
-```
-# Environment variables
+*.log
+*.tmp
+*.swp
+*.pyc
+pycache/
+__pycache__/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+node_modules/
+.venv/
+venv/
 .env
 .env.local
 .env.*
-
-# Logs
-*.log
-
-# Temporary files
-*.tmp
-*.swp
-*.swo
-
-# Dependencies
-node_modules/
-venv/
-.venv/
-__pycache__/
-.mypy_cache/
-.pytest_cache/
-pip-log.txt
-pip-selfcheck.json
-
-# Build artifacts
-dist/
-build/
-*.egg-info/
-.coverage
-coverage/
-htmlcov/
-
-# IDE files
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# OS generated files
-.DS_Store
+*.env.*
 Thumbs.db
-
-# Docker and container related
-.dockerenv
-*.dockerignore
-
-# Compressed files
+.DS_Store
+dist/
+build/
+target/
+.gradle/
+.mypy_cache/
+.pytest_cache/
+coverage/
+htmlcov/
+.coverage
 *.zip
 *.gz
 *.tar
@@ -67,4 +53,3 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-```
