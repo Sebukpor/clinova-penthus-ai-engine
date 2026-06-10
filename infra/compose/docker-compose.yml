@@ -1,0 +1,271 @@
+# ============================================
+# Clinova Penthus AI Engine - Production Docker Compose
+# Single-host architecture for OCI VM deployment
+# ============================================
+# Architecture:
+#   Internet -> Nginx -> FastAPI -> PostgreSQL + Redis + vLLM
+# All services run on one OCI VM via Docker Compose
+# ============================================
+
+version: "3.8"
+
+services:
+  # ============================================
+  # Nginx Reverse Proxy
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: penthus-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - penthus-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # FastAPI Clinical AI Orchestrator
+  # ============================================
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: penthus-api
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+asyncpg://penthus:${DB_PASSWORD:-changeme}@postgres:5432/clinova
+      - REDIS_URL=redis://redis:6379/0
+      - VLLM_BASE_URL=http://vllm:8000/v1
+      - VLLM_MODEL=penthus-1.2-alpha-4b
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - API_RELOAD=false
+      - API_WORKERS=2
+      - AUDIT_LOG_ENABLED=true
+      - AUDIT_LOG_PHI_MASKING=true
+      - ENABLE_SNOMED_ENDPOINT=true
+      - ENABLE_ICD_ENDPOINT=true
+      - ENABLE_FHIR_ENDPOINT=true
+      - ENABLE_GAP_DETECTION=true
+      - ENABLE_TRANSLATION=true
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - penthus-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./logs:/app/logs
+
+  # ============================================
+  # PostgreSQL - Clinical Data Store
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: penthus-postgres
+    environment:
+      POSTGRES_USER: penthus
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: clinova
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    networks:
+      - penthus-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penthus -d clinova"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # Redis - Cache Layer
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: penthus-redis
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    networks:
+      - penthus-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # vLLM - Model Inference Service
+  # OpenAI-compatible API endpoint
+  # ============================================
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: penthus-vllm
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=0
+      - VLLM_PORT=8000
+    expose:
+      - "8000"
+    volumes:
+      - vllm_cache:/root/.cache/huggingface
+    networks:
+      - penthus-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    # GPU configuration for OCI GPU instances
+    # For CPU-only testing, comment out deploy section and use mock profile
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model Sebukpor/medical-document-understanding-v2-fixed
+      --served-model-name penthus-1.2-alpha-4b
+      --host 0.0.0.0
+      --port 8000
+      --dtype bfloat16
+      --max-model-len 8192
+      --gpu-memory-utilization 0.90
+      --enable-prefix-caching
+      --trust-remote-code
+
+  # ============================================
+  # Mock vLLM for CPU-only development/testing
+  # Use this profile when no GPU is available
+  # ============================================
+  vllm-mock:
+    image: python:3.12-slim
+    container_name: penthus-vllm-mock
+    command: >
+      sh -c "
+      pip install fastapi uvicorn httpx &&
+      cat > /tmp/mock_vllm.py << 'EOF'
+from fastapi import FastAPI, Request
+from datetime import datetime
+import json
+
+app = FastAPI()
+
+@app.post(\"/v1/chat/completions\")
+async def chat_completion(request: Request):
+    body = await request.json()
+    messages = body.get(\"messages\", [])
+    
+    # Extract workflow from messages or default to ocr
+    workflow = \"ocr\"
+    for msg in messages:
+        content = msg.get(\"content\", \"\")
+        if \"SOAP\" in str(content):
+            workflow = \"soap\"
+        elif \"entities\" in str(content).lower():
+            workflow = \"entities\"
+        elif \"normalize\" in str(content).lower():
+            workflow = \"normalization\"
+        elif \"summary\" in str(content).lower():
+            workflow = \"summary\"
+        elif \"gap\" in str(content).lower():
+            workflow = \"gaps\"
+        elif \"translate\" in str(content).lower():
+            workflow = \"translation\"
+        elif \"FHIR\" in str(content):
+            workflow = \"fhir\"
+    
+    # Return appropriate mock response based on workflow
+    mock_responses = {
+        \"ocr\": {\"raw_text\": \"Mock OCR result from scanned document\", \"entities\": [], \"layout\": {\"pages\": 1, \"blocks\": []}, \"language\": \"en\", \"confidence\": 0.95},
+        \"soap\": {\"subjective\": \"Patient reports feeling well.\", \"objective\": \"Vitals stable.\", \"assessment\": \"Follow-up visit.\", \"plan\": \"Continue current treatment.\"},
+        \"entities\": {\"entities\": [{\"text\": \"hypertension\", \"type\": \"condition\", \"start\": 0, \"end\": 12}]},
+        \"normalization\": {\"normalized_terms\": [{\"source_text\": \"high blood pressure\", \"normalized_text\": \"hypertension\", \"type\": \"condition\"}]},
+        \"summary\": {\"summary\": \"Patient follow-up for hypertension management. Vitals stable. Continue current regimen.\"},
+        \"gaps\": {\"gaps\": [{\"category\": \"medication\", \"description\": \"Medication reconciliation needed\", \"priority\": \"medium\"}]},
+        \"translation\": {\"translated_text\": \"El paciente reporta sentirse bien.\", \"source_language\": \"en\", \"target_language\": \"es\"},
+        \"fhir\": {\"resources\": [{\"resourceType\": \"Encounter\", \"status\": \"finished\", \"class\": {\"system\": \"http://terminology.hl7.org/CodeSystem/v3-ActCode\", \"code\": \"AMB\"}}]}
+    }
+    
+    result = mock_responses.get(workflow, {\"result\": \"mock response\"})
+    
+    return {
+        \"choices\": [{
+            \"message\": {\"content\": json.dumps(result)},
+            \"finish_reason\": \"stop\"
+        }],
+        \"usage\": {\"prompt_tokens\": 100, \"completion_tokens\": 50, \"total_tokens\": 150},
+        \"model\": \"penthus-mock-4b\",
+        \"id\": f\"mock-{datetime.now().isoformat()}\"
+    }
+
+@app.get(\"/health\")
+async def health():
+    return {\"status\": \"healthy\", \"service\": \"vllm-mock\"}
+
+@app.get(\"/models\")
+async def models():
+    return {\"object\": \"list\", \"data\": [{\"id\": \"penthus-mock-4b\", \"object\": \"model\"}]}
+EOF
+      uvicorn /tmp/mock_vllm:app --host 0.0.0.0 --port 8000
+      "
+    expose:
+      - "8000"
+    networks:
+      - penthus-network
+    restart: unless-stopped
+    profiles:
+      - cpu
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  vllm_cache:
+    driver: local
+
+networks:
+  penthus-network:
+    driver: bridge
+    name: penthus-network

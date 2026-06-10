@@ -28,7 +28,7 @@ from app.services.audit_service import AuditService
 from app.services.document_service import DocumentService
 from app.services.inference_log_service import InferenceLogService
 from app.services.object_storage import ObjectStorageService
-from app.terminology.client import TerminologyGatewayClient
+from app.terminology.client import TerminologyService
 
 logger = get_logger(__name__)
 
@@ -108,7 +108,7 @@ async def get_orchestrator(
     )
 
     # Build terminology client
-    terminology = TerminologyGatewayClient()
+    terminology = TerminologyService()
 
     # Build context store
     context_store = ClinicalContextStore(
