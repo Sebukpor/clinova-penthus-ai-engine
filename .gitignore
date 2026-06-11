@@ -1,1 +1,217 @@
-Nothing needs to be added to .gitignore since only a README.md file was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+# ==========================================
+
+# Python
+
+# ==========================================
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+
+*.so
+
+# Distribution / packaging
+
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==========================================
+
+# Virtual Environments
+
+# ==========================================
+
+.venv/
+venv/
+env/
+ENV/
+
+# ==========================================
+
+# Environment Variables
+
+# ==========================================
+
+.env
+.env.*
+!.env.example
+
+# ==========================================
+
+# Secrets
+
+# ==========================================
+
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# OCI Credentials
+
+oci_api_key.pem
+oci_config
+.oci/
+
+# ==========================================
+
+# Database Files
+
+# ==========================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL local volumes
+
+postgres_data/
+
+# Redis local volumes
+
+redis_data/
+
+# ==========================================
+
+# Logs
+
+# ==========================================
+
+logs/
+*.log
+*.out
+
+# ==========================================
+
+# Coverage / Testing
+
+# ==========================================
+
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+coverage.xml
+*.cover
+
+# ==========================================
+
+# Jupyter
+
+# ==========================================
+
+.ipynb_checkpoints/
+
+# ==========================================
+
+# VS Code
+
+# ==========================================
+
+.vscode/
+
+# ==========================================
+
+# JetBrains
+
+# ==========================================
+
+.idea/
+
+# ==========================================
+
+# MacOS
+
+# ==========================================
+
+.DS_Store
+
+# ==========================================
+
+# Windows
+
+# ==========================================
+
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+
+# Docker
+
+# ==========================================
+
+docker-data/
+*.tar
+
+# ==========================================
+
+# Terraform
+
+# ==========================================
+
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.json
+
+# ==========================================
+
+# Kubernetes
+
+# ==========================================
+
+kubeconfig
+*.kubeconfig
+
+# ==========================================
+
+# Local Uploads / Object Storage
+
+# ==========================================
+
+uploads/
+storage/
+minio-data/
+
+# ==========================================
+
+# Runtime Files
+
+# ==========================================
+
+*.pid
+*.sock
+
+# ==========================================
+
+# Temporary Files
+
+# ==========================================
+
+tmp/
+temp/
+.cache/
