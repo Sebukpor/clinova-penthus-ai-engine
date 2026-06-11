@@ -1,4 +1,13 @@
-version: "3.8"
+# ============================================
+# Clinova Penthus AI Engine - Production Docker Compose
+# Single-host architecture for OCI VM deployment
+# Optimized for production MVP deployment
+# ============================================
+# Architecture:
+#   Internet -> Nginx -> FastAPI -> PostgreSQL + Redis + vLLM
+# All services run on one OCI VM via Docker Compose
+# ============================================
+
 
 services:
 
@@ -20,9 +29,14 @@ services:
     networks:
       - penthus-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # ============================================
-  # FastAPI Orchestrator
+  # FastAPI Clinical AI Orchestrator
   # ============================================
   api:
     image: ${API_IMAGE:-penthus-api:local}
@@ -44,8 +58,17 @@ services:
 
       SECRET_KEY: ${SECRET_KEY}
 
-      API_WORKERS: "2"
       API_RELOAD: "false"
+      API_WORKERS: "2"
+
+      AUDIT_LOG_ENABLED: "true"
+      AUDIT_LOG_PHI_MASKING: "true"
+
+      ENABLE_SNOMED_ENDPOINT: "true"
+      ENABLE_ICD_ENDPOINT: "true"
+      ENABLE_FHIR_ENDPOINT: "true"
+      ENABLE_GAP_DETECTION: "true"
+      ENABLE_TRANSLATION: "true"
 
     expose:
       - "8000"
@@ -58,10 +81,21 @@ services:
 
     networks:
       - penthus-network
+
     restart: unless-stopped
 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    volumes:
+      - ./logs:/app/logs
+
   # ============================================
-  # PostgreSQL
+  # PostgreSQL - Clinical Data Store
   # ============================================
   postgres:
     image: postgres:16-alpine
@@ -71,73 +105,122 @@ services:
       POSTGRES_USER: penthus
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: clinova
+      PGDATA: /var/lib/postgresql/data/pgdata
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    expose:
+      - "5432"
+
     networks:
       - penthus-network
+
     restart: unless-stopped
 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penthus -d clinova"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   # ============================================
-  # Redis
+  # Redis - Cache Layer
   # ============================================
   redis:
     image: redis:7-alpine
     container_name: penthus-redis
 
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
 
     volumes:
       - redis_data:/data
 
+    expose:
+      - "6379"
+
     networks:
       - penthus-network
+
     restart: unless-stopped
 
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ============================================
-  # vLLM (FIXED - STABLE CUDA COMPATIBLE)
+  # vLLM - Model Inference Service
   # ============================================
   vllm:
-    image: vllm/vllm-openai:v0.6.6   # 🔥 IMPORTANT FIX (NOT latest)
+    image: vllm/vllm-openai:latest
     container_name: penthus-vllm
-
-    ports:
-      - "8001:8000"
 
     environment:
       HF_TOKEN: ${HF_TOKEN}
       CUDA_VISIBLE_DEVICES: "0"
-      NVIDIA_VISIBLE_DEVICES: "all"
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility
-      VLLM_ENABLE_CUDA_COMPATIBILITY: "1"
+
+    ports:
+      - "8001:8000"
 
     volumes:
       - vllm_cache:/root/.cache/huggingface
 
-    gpus: all   # 🔥 REQUIRED for A10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
-    restart: unless-stopped
+    ipc: host
 
     networks:
       - penthus-network
 
-    command: >
-      vllm serve Sebukpor/medical-document-understanding-v2-fixed
-      --host 0.0.0.0
-      --port 8000
-      --served-model-name penthus-1.2-alpha-4b
-      --dtype bfloat16
-      --max-model-len 8192
-      --gpu-memory-utilization 0.90
-      --enable-prefix-caching
-      --trust-remote-code
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+    command:
+      - --model
+      - Sebukpor/medical-document-understanding-v2-fixed
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --served-model-name
+      - penthus-1.2-alpha-4b
+      - --dtype
+      - bfloat16
+      - --max-model-len
+      - "8192"
+      - --gpu-memory-utilization
+      - "0.90"
+      - --enable-prefix-caching
+      - --trust-remote-code
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   vllm_cache:
+    driver: local
 
 networks:
   penthus-network:
     driver: bridge
+    name: penthus-network
