@@ -1,23 +1,22 @@
-# DEPLOYMENT-OCI-MVP.md
-
 # Clinova Penthus AI Engine - OCI MVP Deployment Guide
 
 ## Overview
 
 This guide provides complete instructions for deploying the Clinova Penthus AI Engine on a single OCI Compute instance using Docker Compose. This is a production-ready MVP deployment suitable for clinical workloads.
 
+**Target Instance:** `ocr-instance` (Ubuntu, previously hosted OCR service)  
 **Architecture:**
 ```
 Internet
     |
     v
-Nginx (Reverse Proxy)
+Nginx (Reverse Proxy, TLS, Rate Limiting)
     |
     v
-FastAPI Application
+FastAPI Application (2 workers)
     |
-    +-- PostgreSQL (Clinical Data)
-    +-- Redis (Caching)
+    +-- PostgreSQL 16 (Clinical Data, Audit Logs)
+    +-- Redis 7 (Caching Layer, 512MB limit)
     +-- vLLM (Model Inference - GPU)
     |   or
     +-- vLLM-Mock (CPU-only testing)
@@ -30,10 +29,10 @@ FastAPI Application
 ### Completed Server Preparation
 
 Ensure you have completed all steps in **SERVER-PREPARATION.md**:
-- [ ] Old OCR containers/images/volumes removed
-- [ ] Apache removed
+- [ ] Stale `medical-ocr-api` container removed (~16GB reclaimed)
+- [ ] Apache stopped and removed (Port 80 freed)
+- [ ] NVIDIA drivers installed and verified (`nvidia-smi` works)
 - [ ] Docker and Docker Compose installed
-- [ ] NVIDIA drivers verified (GPU instances)
 - [ ] Ports 80/443 available
 - [ ] Repository cloned to VM
 - [ ] `.env` file configured with secure values
