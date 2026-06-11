@@ -2,7 +2,7 @@
 
 **DAS MedHub Clinical AI Platform - AI-Powered Clinical Documentation and Intelligence**
 
-Penthus is the Clinical AI Engine powering the Clinova platform. It uses a single vLLM-hosted fine-tuned Qwen 3.5 4B model to power OCR, SOAP generation, entity extraction, summarization, translation, FHIR extraction, documentation gap detection, and clinical normalization. External terminology services perform official clinical coding.
+Penthus is the Clinical AI Engine powering the Clinova platform. It uses a single vLLM-hosted DAS medhub Penthus model to power OCR, SOAP generation, entity extraction, summarization, translation, FHIR extraction, documentation gap detection, and clinical normalization. External terminology services perform official clinical coding.
 
 ---
 
@@ -232,7 +232,7 @@ Background job processing:
 | **Database** | PostgreSQL 16 + SQLAlchemy 2 + Alembic |
 | **Cache** | Redis 7 |
 | **Model Serving** | vLLM (OpenAI-compatible API) |
-| **Base Model** | Qwen 3.5 4B fine-tuned for medical documents |
+| **Base Model** | DAS medhub Penthus model |
 | **Object Storage** | OCI Object Storage / MinIO |
 | **Observability** | OpenTelemetry + Prometheus + Grafana |
 | **Container** | Docker + Kubernetes (OKE) |

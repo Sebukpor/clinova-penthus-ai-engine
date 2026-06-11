@@ -2,7 +2,7 @@ Metadata-Version: 2.4
 Name: clinova-penthus-ai-engine
 Version: 1.2.0
 Summary: Clinical AI Engine - Penthus. AI-powered clinical documentation and intelligence platform.
-Author-email: DAS MedHub Engineering <engineering@dasmedhub.com>
+Author-email: DAS MedHub Engineering <dasmedhub@gmail.com>
 License: Proprietary
 Keywords: clinical-ai,healthcare,fastapi,vllm,fhir,medical-nlp
 Classifier: Development Status :: 4 - Beta
@@ -81,7 +81,7 @@ Requires-Dist: locust>=2.20.1; extra == "dev"
 
 **DAS MedHub Clinical AI Platform - AI-Powered Clinical Documentation and Intelligence**
 
-Penthus is the Clinical AI Engine powering the Clinova platform. It uses a single vLLM-hosted fine-tuned Qwen 3.5 4B model to power OCR, SOAP generation, entity extraction, summarization, translation, FHIR extraction, documentation gap detection, and clinical normalization. External terminology services perform official clinical coding.
+Penthus is the Clinical AI Engine powering the Clinova platform. It uses a single vLLM-hosted DAS medhub penthus model to power OCR, SOAP generation, entity extraction, summarization, translation, FHIR extraction, documentation gap detection, and clinical normalization. External terminology services perform official clinical coding.
 
 ---
 
