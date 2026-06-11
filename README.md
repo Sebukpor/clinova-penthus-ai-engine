@@ -660,7 +660,55 @@ CREATE INDEX idx_inference_logs_tenant_workflow ON inference_logs(tenant_id, wor
 
 ---
 
-## Production Deployment - OCI
+## Production Deployment - OCI MVP (Single Server)
+
+For production MVP deployment on a single OCI Compute instance using Docker Compose:
+
+### Quick Start
+
+```bash
+# 1. Prepare the server (first time only)
+# Follow SERVER-PREPARATION.md for complete VM setup
+
+# 2. Deploy the application
+cd ~/penthus/infra/compose
+./deployment.sh deploy
+
+# 3. Verify health
+./healthcheck.sh
+
+# 4. Test API endpoints
+curl http://localhost/api/v1/health
+```
+
+### Documentation
+
+| Document | Purpose |
+|----------|---------|
+| **SERVER-PREPARATION.md** | VM preparation (clean old OCR, install Docker) |
+| **DEPLOYMENT-OCI-MVP.md** | Complete deployment guide |
+| **DEPLOYMENT-REPORT.md** | Architecture and cost analysis |
+
+### Architecture
+
+```
+Internet → Nginx → FastAPI → PostgreSQL + Redis + vLLM
+```
+
+All services run on a single OCI VM via Docker Compose. No Kubernetes required.
+
+### Requirements
+
+- OCI Compute VM (GPU recommended, CPU supported with mock mode)
+- 50GB+ disk space
+- Docker and Docker Compose
+- HuggingFace token for model download
+
+---
+
+## Enterprise Deployment - OKE/Kubernetes
+
+For enterprise-scale deployments requiring high availability:
 
 ### Prerequisites
 
@@ -702,7 +750,6 @@ kubectl apply -f infra/k8s/
 kubectl get pods -n clinova
 kubectl get svc -n clinova
 ```
-
 
 ---
 

@@ -1,217 +1,72 @@
-# ==========================================
-
-# Python
-
-# ==========================================
-
-**pycache**/
-*.py[cod]
-*$py.class
-
-# Compiled extensions
-
-*.so
-
-# Distribution / packaging
-
-build/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# ==========================================
-
-# Virtual Environments
-
-# ==========================================
-
-.venv/
+```gitignore
+# Dependencies
+node_modules/
 venv/
-env/
-ENV/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
-# ==========================================
-
-# Environment Variables
-
-# ==========================================
-
-.env
-.env.*
-!.env.example
-
-# ==========================================
-
-# Secrets
-
-# ==========================================
-
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
-
-id_rsa
-id_rsa.pub
-id_ed25519
-id_ed25519.pub
-
-# OCI Credentials
-
-oci_api_key.pem
-oci_config
-.oci/
-
-# ==========================================
-
-# Database Files
-
-# ==========================================
-
-*.db
-*.sqlite
-*.sqlite3
-
-# PostgreSQL local volumes
-
-postgres_data/
-
-# Redis local volumes
-
-redis_data/
-
-# ==========================================
-
-# Logs
-
-# ==========================================
-
-logs/
-*.log
+# Build artifacts
+dist/
+build/
+*.pyc
+*.class
+*.o
+*.exe
+*.dll
+*.so
+*.a
+*.obj
 *.out
 
-# ==========================================
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
 
-# Coverage / Testing
+# Environment files
+.env
+.env.local
+*.env.*
 
-# ==========================================
-
-.coverage
-.pytest_cache/
-htmlcov/
-.tox/
-.nox/
-
-coverage.xml
-*.cover
-
-# ==========================================
-
-# Jupyter
-
-# ==========================================
-
-.ipynb_checkpoints/
-
-# ==========================================
-
-# VS Code
-
-# ==========================================
-
+# Editors and IDEs
 .vscode/
-
-# ==========================================
-
-# JetBrains
-
-# ==========================================
-
 .idea/
 
-# ==========================================
-
-# MacOS
-
-# ==========================================
-
+# System files
 .DS_Store
-
-# ==========================================
-
-# Windows
-
-# ==========================================
-
 Thumbs.db
-Desktop.ini
 
-# ==========================================
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
-# Docker
-
-# ==========================================
-
-docker-data/
+# Compressed files
+*.zip
+*.gz
 *.tar
-
-# ==========================================
-
-# Terraform
-
-# ==========================================
-
-.terraform/
-*.tfstate
-*.tfstate.*
-terraform.tfvars
-terraform.tfvars.json
-
-# ==========================================
-
-# Kubernetes
-
-# ==========================================
-
-kubeconfig
-*.kubeconfig
-
-# ==========================================
-
-# Local Uploads / Object Storage
-
-# ==========================================
-
-uploads/
-storage/
-minio-data/
-
-# ==========================================
-
-# Runtime Files
-
-# ==========================================
-
-*.pid
-*.sock
-
-# ==========================================
-
-# Temporary Files
-
-# ==========================================
-
-tmp/
-temp/
-.cache/
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+```
