@@ -1,13 +1,3 @@
-# ============================================
-# Clinova Penthus AI Engine - Production Docker Compose
-# Single-host architecture for OCI VM deployment
-# Optimized for production MVP deployment
-# ============================================
-# Architecture:
-#   Internet -> Nginx -> FastAPI -> PostgreSQL + Redis + vLLM
-# All services run on one OCI VM via Docker Compose
-# ============================================
-
 version: "3.8"
 
 services:
@@ -133,12 +123,7 @@ services:
       - penthus-network
 
     command: >
-<<<<<<< HEAD
       vllm serve Sebukpor/medical-document-understanding-v2-fixed
-=======
-      serve Sebukpor/medical-document-understanding-v2-fixed
-      --served-model-name penthus-1.2-alpha-4b
->>>>>>> dfa28056aa09736c6dd4c0a98f46bf8a54c86cd3
       --host 0.0.0.0
       --port 8000
       --served-model-name penthus-1.2-alpha-4b
