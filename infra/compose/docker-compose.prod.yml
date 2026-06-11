@@ -159,8 +159,7 @@ services:
               count: 1
               capabilities: [gpu]
     command: >
-      python -m vllm.entrypoints.openai.api_server
-      --model Sebukpor/medical-document-understanding-v2-fixed
+      serve Sebukpor/medical-document-understanding-v2-fixed
       --served-model-name penthus-1.2-alpha-4b
       --host 0.0.0.0
       --port 8000
