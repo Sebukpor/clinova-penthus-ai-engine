@@ -87,7 +87,7 @@ $ curl http://localhost/api/v1/readiness
 ### 2.1 Base URL
 
 ```
-Production: http://<your-server-ip>/api/v1
+Production: http://141.148.221.154/api/v1
 Local Testing: http://localhost/api/v1
 ```
 
@@ -739,8 +739,8 @@ curl http://localhost/api/v1/metrics
 
 | Resource | Location |
 |----------|----------|
-| Interactive API Docs | `http://<server>/docs` (Swagger UI) |
-| OpenAPI Schema | `http://<server>/openapi.json` |
+| Interactive API Docs | `http://141.148.221.154/docs` (Swagger UI) |
+| OpenAPI Schema | `http://141.148.221.154/openapi.json` |
 | GitHub Repository | `/workspace` |
 | Architecture Docs | `README.md`, `DEPLOYMENT-OCI-MVP.md` |
 
@@ -773,4 +773,4 @@ curl http://localhost/api/v1/readiness
 
 **Document Version:** 1.0  
 **Last Updated:** June 11, 2026  
-**Maintained By:** Platform Engineering Team
+**Maintained By:** DAS medhub Engineering Team
