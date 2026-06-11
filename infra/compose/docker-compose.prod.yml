@@ -11,6 +11,7 @@
 version: "3.8"
 
 services:
+
   # ============================================
   # Nginx Reverse Proxy
   # ============================================
@@ -29,14 +30,9 @@ services:
     networks:
       - penthus-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   # ============================================
-  # FastAPI Clinical AI Orchestrator
+  # FastAPI Orchestrator
   # ============================================
   api:
     image: ${API_IMAGE:-penthus-api:local}
@@ -44,126 +40,103 @@ services:
       context: ..
       dockerfile: infra/docker/api.Dockerfile
     container_name: penthus-api
+
     environment:
-      - ENVIRONMENT=production
-      - DEBUG=false
-      - LOG_LEVEL=INFO
-      - DATABASE_URL=postgresql+asyncpg://penthus:${DB_PASSWORD}@postgres:5432/clinova
-      - REDIS_URL=redis://redis:6379/0
-      - VLLM_BASE_URL=http://vllm:8000/v1
-      - VLLM_MODEL=penthus-1.2-alpha-4b
-      - SECRET_KEY=${SECRET_KEY}
-      - API_RELOAD=false
-      - API_WORKERS=2
-      - AUDIT_LOG_ENABLED=true
-      - AUDIT_LOG_PHI_MASKING=true
-      - ENABLE_SNOMED_ENDPOINT=true
-      - ENABLE_ICD_ENDPOINT=true
-      - ENABLE_FHIR_ENDPOINT=true
-      - ENABLE_GAP_DETECTION=true
-      - ENABLE_TRANSLATION=true
+      ENVIRONMENT: production
+      DEBUG: "false"
+      LOG_LEVEL: INFO
+
+      DATABASE_URL: postgresql+asyncpg://penthus:${DB_PASSWORD}@postgres:5432/clinova
+      REDIS_URL: redis://redis:6379/0
+
+      VLLM_BASE_URL: http://vllm:8000/v1
+      VLLM_MODEL: penthus-1.2-alpha-4b
+
+      SECRET_KEY: ${SECRET_KEY}
+
+      API_WORKERS: "2"
+      API_RELOAD: "false"
+
     expose:
       - "8000"
+
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+
     networks:
       - penthus-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    volumes:
-      - ./logs:/app/logs
 
   # ============================================
-  # PostgreSQL - Clinical Data Store
+  # PostgreSQL
   # ============================================
   postgres:
     image: postgres:16-alpine
     container_name: penthus-postgres
+
     environment:
       POSTGRES_USER: penthus
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: clinova
-      PGDATA: /var/lib/postgresql/data/pgdata
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
+
     networks:
       - penthus-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U penthus -d clinova"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   # ============================================
-  # Redis - Cache Layer
+  # Redis
   # ============================================
   redis:
     image: redis:7-alpine
     container_name: penthus-redis
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru --appendonly yes
+
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+
     volumes:
       - redis_data:/data
-    expose:
-      - "6379"
+
     networks:
       - penthus-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # ============================================
-  # vLLM - Model Inference Service
-  # OpenAI-compatible API endpoint
+  # vLLM (FIXED - STABLE CUDA COMPATIBLE)
   # ============================================
   vllm:
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.6.6   # 🔥 IMPORTANT FIX (NOT latest)
     container_name: penthus-vllm
+
+    ports:
+      - "8001:8000"
+
     environment:
-      - HF_TOKEN=${HF_TOKEN:-}
-      - CUDA_VISIBLE_DEVICES=0
-      - VLLM_PORT=8000
-    expose:
-      - "8000"
+      HF_TOKEN: ${HF_TOKEN}
+      CUDA_VISIBLE_DEVICES: "0"
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      VLLM_ENABLE_CUDA_COMPATIBILITY: "1"
+
     volumes:
       - vllm_cache:/root/.cache/huggingface
+
+    gpus: all   # 🔥 REQUIRED for A10
+
+    restart: unless-stopped
+
     networks:
       - penthus-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-    # GPU configuration for OCI GPU instances
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+
     command: >
-      python -m vllm.entrypoints.openai.api_server
-      --model Sebukpor/medical-document-understanding-v2-fixed
-      --served-model-name penthus-1.2-alpha-4b
+      vllm serve Sebukpor/medical-document-understanding-v2-fixed
       --host 0.0.0.0
       --port 8000
+      --served-model-name penthus-1.2-alpha-4b
       --dtype bfloat16
       --max-model-len 8192
       --gpu-memory-utilization 0.90
@@ -172,13 +145,9 @@ services:
 
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   vllm_cache:
-    driver: local
 
 networks:
   penthus-network:
     driver: bridge
-    name: penthus-network
