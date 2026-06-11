@@ -15,16 +15,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
-        fastapi uvicorn python-multipart python-jose[cryptography] \
-        passlib[bcrypt] httpx aiofiles tenacity python-dotenv \
-        jinja2 pyyaml orjson structlog \
-        cryptography bcrypt sqlalchemy alembic asyncpg \
-        psycopg2-binary redis sqlalchemy-utils \
-        pydantic pydantic-settings email-validator ulid-py python-dateutil \
-        pendulum jsonschema json-repair \
-        boto3 minio fhir.resources
+
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+RUN python - <<'PY'
+import tomllib
+
+with open("pyproject.toml","rb") as f:
+    data = tomllib.load(f)
+
+deps = data["project"]["dependencies"]
+
+with open("/tmp/requirements.txt","w") as r:
+    r.write("\n".join(deps))
+PY
+
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Production stage
 FROM python:3.12-slim AS production
