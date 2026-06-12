@@ -650,16 +650,3 @@ curl -I http://localhost/redoc
 5. **Access Review**: Quarterly review of all API keys and user access
 6. **Incident Response Plan**: Document procedures for data breach response
 
----
-
-## Contact & Support
-
-For security questions or to report vulnerabilities:
-- **Security Team**: security@your-organization.com
-- **Emergency**: +1-XXX-XXX-XXXX (24/7)
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** 2026-06-11  
-**Next Review:** 2026-07-11
