@@ -114,7 +114,7 @@ Local Testing: http://localhost/api/v1
 | `GET` | `/documents/{id}/ocr` | Get cached OCR result for a document |
 | `GET` | `/health` | Health check with component status |
 | `GET` | `/readiness` | Readiness check for load balancer |
-| `GET` | `/metrics` | Prometheus metrics endpoint |
+| `GET` | `/metrics` | metrics endpoint |
 
 ---
 
@@ -931,7 +931,7 @@ curl http://localhost/api/v1/health
 # Detailed readiness (for load balancers)
 curl http://localhost/api/v1/readiness
 
-# Prometheus metrics
+# metrics
 curl http://localhost/api/v1/metrics
 ```
 
