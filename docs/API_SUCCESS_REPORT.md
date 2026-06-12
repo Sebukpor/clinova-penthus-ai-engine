@@ -118,9 +118,218 @@ Local Testing: http://localhost/api/v1
 
 ---
 
-## 3. Developer Guide: Making API Calls
+## 3. Database Schema & Data Model
 
-### 3.1 Standard Request Envelope
+### 3.1 Overview
+
+The Penthus API uses PostgreSQL as the primary database for persistent storage and Redis for caching and session management. All clinical data is stored with multi-tenant isolation.
+
+### 3.2 Core Tables
+
+#### `tenants` Table
+Stores tenant/organization information for multi-tenant isolation.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key, unique tenant identifier |
+| `name` | VARCHAR(255) | Human-readable tenant name (e.g., "Acme Hospital") |
+| `slug` | VARCHAR(50) | URL-friendly identifier (e.g., "acme-hospital") |
+| `api_key` | VARCHAR(255) | API key for authentication |
+| `created_at` | TIMESTAMP | Tenant creation timestamp |
+| `is_active` | BOOLEAN | Whether tenant is active |
+
+**Example:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Acme Medical Center",
+  "slug": "acme-medical",
+  "api_key": "sk_live_abc123xyz789",
+  "created_at": "2026-01-15T10:30:00Z",
+  "is_active": true
+}
+```
+
+#### `encounters` Table
+Represents clinical encounters (patient visits, consultations, etc.).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key, unique encounter identifier |
+| `tenant_id` | UUID | Foreign key to `tenants.id` |
+| `patient_id` | VARCHAR(100) | Patient identifier (from external EMR) |
+| `encounter_number` | VARCHAR(50) | Encounter number (from external EMR) |
+| `encounter_type` | VARCHAR(50) | Type: "inpatient", "outpatient", "emergency" |
+| `started_at` | TIMESTAMP | Encounter start time |
+| `ended_at` | TIMESTAMP | Encounter end time |
+| `department` | VARCHAR(100) | Department where encounter occurred |
+| `provider_id` | VARCHAR(100) | Attending provider identifier |
+| `created_at` | TIMESTAMP | Record creation timestamp |
+| `updated_at` | TIMESTAMP | Last update timestamp |
+
+**Example:**
+```json
+{
+  "id": "660f9500-f39c-52e5-b827-557766550000",
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+  "patient_id": "PAT-2026-001234",
+  "encounter_number": "ENC-20260611-0042",
+  "encounter_type": "outpatient",
+  "started_at": "2026-06-11T09:00:00Z",
+  "ended_at": null,
+  "department": "General Medicine",
+  "provider_id": "DR-5678",
+  "created_at": "2026-06-11T09:00:00Z",
+  "updated_at": "2026-06-11T09:00:00Z"
+}
+```
+
+#### `documents` Table
+Stores uploaded medical documents and OCR results.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key, unique document identifier |
+| `tenant_id` | UUID | Foreign key to `tenants.id` |
+| `encounter_id` | UUID | Foreign key to `encounters.id` |
+| `document_type` | VARCHAR(50) | Type: "lab_report", "prescription", "discharge_summary" |
+| `file_name` | VARCHAR(255) | Original file name |
+| `storage_uri` | VARCHAR(500) | Object storage URI (e.g., s3://bucket/path) |
+| `mime_type` | VARCHAR(50) | MIME type (e.g., "image/jpeg", "application/pdf") |
+| `ocr_status` | VARCHAR(20) | Status: "pending", "processing", "completed", "failed" |
+| `ocr_result` | JSONB | Extracted text and entities from OCR |
+| `page_count` | INTEGER | Number of pages |
+| `language` | VARCHAR(10) | Detected language code |
+| `confidence_score` | FLOAT | OCR confidence score (0.0-1.0) |
+| `created_at` | TIMESTAMP | Upload timestamp |
+| `processed_at` | TIMESTAMP | OCR completion timestamp |
+
+**Example:**
+```json
+{
+  "id": "770fa600-g4ad-63f6-c938-668877660000",
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+  "encounter_id": "660f9500-f39c-52e5-b827-557766550000",
+  "document_type": "lab_report",
+  "file_name": "blood_test_results.pdf",
+  "storage_uri": "s3://penthus-docs/tenant_001/lab_report_001.pdf",
+  "mime_type": "application/pdf",
+  "ocr_status": "completed",
+  "ocr_result": {
+    "raw_text": "LABORATORY RESULTS\nPatient: John Doe\n...",
+    "entities": [...],
+    "confidence": 0.97
+  },
+  "page_count": 2,
+  "language": "en",
+  "confidence_score": 0.97,
+  "created_at": "2026-06-11T09:15:00Z",
+  "processed_at": "2026-06-11T09:15:45Z"
+}
+```
+
+#### `clinical_notes` Table
+Stores generated clinical notes (SOAP, summaries, etc.).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key, unique note identifier |
+| `tenant_id` | UUID | Foreign key to `tenants.id` |
+| `encounter_id` | UUID | Foreign key to `encounters.id` |
+| `document_id` | UUID | Foreign key to `documents.id` (optional) |
+| `note_type` | VARCHAR(50) | Type: "soap", "summary", "discharge" |
+| `content` | JSONB | Structured note content |
+| `raw_text` | TEXT | Plain text version |
+| `model_version` | VARCHAR(100) | AI model version used |
+| `prompt_version` | VARCHAR(50) | Prompt template version |
+| `status` | VARCHAR(20) | Status: "draft", "finalized", "archived" |
+| `created_by` | VARCHAR(100) | Creator identifier (user or system) |
+| `created_at` | TIMESTAMP | Creation timestamp |
+| `metadata` | JSONB | Additional metadata |
+
+**Example:**
+```json
+{
+  "id": "880gb700-h5be-74g7-d049-779988770000",
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+  "encounter_id": "660f9500-f39c-52e5-b827-557766550000",
+  "note_type": "soap",
+  "content": {
+    "subjective": "Patient reports fever for 3 days...",
+    "objective": "Temperature 38.5°C...",
+    "assessment": "Upper respiratory infection...",
+    "plan": "1. Supportive care..."
+  },
+  "raw_text": "SOAP NOTE\nSubjective: Patient reports...",
+  "model_version": "penthus-1.2-alpha-4b",
+  "prompt_version": "soap.v1",
+  "status": "draft",
+  "created_by": "system",
+  "created_at": "2026-06-11T09:20:00Z",
+  "metadata": {
+    "latency_ms": 1450,
+    "request_id": "req_soap_001"
+  }
+}
+```
+
+#### `audit_logs` Table
+Tracks all API requests and data modifications for compliance.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Foreign key to `tenants.id` |
+| `request_id` | VARCHAR(100) | Unique request identifier |
+| `endpoint` | VARCHAR(255) | API endpoint called |
+| `method` | VARCHAR(10) | HTTP method |
+| `user_id` | VARCHAR(100) | User who made the request |
+| `ip_address` | INET | Client IP address |
+| `request_payload` | JSONB | Request body (sanitized) |
+| `response_status` | INTEGER | HTTP response status code |
+| `latency_ms` | INTEGER | Request latency in milliseconds |
+| `created_at` | TIMESTAMP | Request timestamp |
+
+### 3.3 Field Definitions
+
+#### Key Identifiers Explained
+
+| Field | Description | Example | Usage |
+|-------|-------------|---------|-------|
+| `tenant_id` | **Multi-tenant isolation identifier**. Uniquely identifies the organization/customer. All data is scoped to a tenant for security and data isolation. | `"tenant_001"` or UUID | Required in all API requests |
+| `encounter_id` | **Clinical encounter identifier**. Represents a single patient visit, consultation, or hospital stay. Groups all documents and notes for that visit. | `"enc_20260611_0042"` or UUID | Required for workflow endpoints |
+| `document_id` | **Document identifier**. Unique ID for an uploaded medical document (lab report, prescription, etc.). Used for OCR caching and retrieval. | `"doc_lab_001"` or UUID | Optional; enables OCR result caching |
+| `patient_id` | **Patient identifier**. External patient ID from your EMR/EHR system. Not used internally by Penthus but passed through for context. | `"PAT-2026-001234"` | Optional; for your reference |
+| `request_id` | **Request trace identifier**. Auto-generated UUID for each API request. Used for debugging, audit logs, and tracing. | `"req_abc123xyz"` | Returned in all responses |
+
+#### Metadata Fields
+
+| Field | Description | Example Values |
+|-------|-------------|----------------|
+| `source` | Origin of the request | `"doctor_tablet"`, `"web_portal"`, `"mobile_app"`, `"integration"` |
+| `specialty` | Medical specialty context | `"general_medicine"`, `"cardiology"`, `"pediatrics"` |
+| `priority` | Processing priority | `"routine"`, `"urgent"`, `"stat"` |
+| `locale` | Regional settings | `"en-US"`, `"en-GB"`, `"es-MX"` |
+
+### 3.4 Redis Cache Structure
+
+Redis is used for:
+- **OCR Result Caching**: Cached by `document_id` to avoid re-processing
+- **Session Storage**: Temporary session data for async workflows
+- **Rate Limiting**: Token bucket counters per tenant/API key
+
+**Cache Keys:**
+```
+ocr:{document_id}          -> JSON (OCR results, TTL: 7 days)
+session:{encounter_id}     -> JSON (context data, TTL: 24 hours)
+ratelimit:{tenant_id}      -> Integer (token count, TTL: 1 minute)
+```
+
+---
+
+## 4. Developer Guide: Making API Calls
+
+### 4.1 Standard Request Envelope
 
 All workflow endpoints accept a consistent request format:
 
@@ -152,7 +361,7 @@ All workflow endpoints accept a consistent request format:
 - `language` - ISO 639-1 language code (default: "en")
 - `metadata` - Additional context metadata
 
-### 3.2 Standard Response Envelope
+### 4.2 Standard Response Envelope
 
 All endpoints return a consistent response format:
 
@@ -177,9 +386,9 @@ All endpoints return a consistent response format:
 
 ---
 
-## 4. Usage Examples
+## 5. Usage Examples
 
-### 4.1 OCR - Extract Text from Medical Document
+### 5.1 OCR - Extract Text from Medical Document
 
 **Use Case:** Convert scanned medical documents, lab reports, or handwritten notes into structured text.
 
@@ -228,7 +437,7 @@ curl -X POST http://localhost/api/v1/ocr \
 
 ---
 
-### 4.2 SOAP Note Generation
+### 5.2 SOAP Note Generation
 
 **Use Case:** Generate structured SOAP notes from physician dictation or rough clinical notes.
 
@@ -270,7 +479,7 @@ curl -X POST http://localhost/api/v1/soap \
 
 ---
 
-### 4.3 Clinical Entity Extraction
+### 5.3 Clinical Entity Extraction
 
 **Use Case:** Extract problems, medications, procedures, and other clinical entities from unstructured text.
 
@@ -319,7 +528,7 @@ curl -X POST http://localhost/api/v1/entities \
 
 ---
 
-### 4.4 Documentation Gap Detection
+### 5.4 Documentation Gap Detection
 
 **Use Case:** Identify missing elements in clinical documentation for quality improvement.
 
@@ -384,7 +593,7 @@ curl -X POST http://localhost/api/v1/gaps \
 
 ---
 
-### 4.5 FHIR Resource Generation
+### 5.5 FHIR Resource Generation
 
 **Use Case:** Convert clinical narratives into standardized FHIR R4 resources.
 
@@ -453,7 +662,7 @@ curl -X POST http://localhost/api/v1/fhir \
 
 ---
 
-### 4.6 Clinical Translation
+### 5.6 Clinical Translation
 
 **Use Case:** Translate clinical text between supported languages while preserving medical terminology accuracy.
 
@@ -496,15 +705,15 @@ curl -X POST http://localhost/api/v1/translation \
 
 ---
 
-## 5. Python Client Example
+## 6. Python Client Example
 
-### 5.1 Installation
+### 6.1 Installation
 
 ```bash
 pip install httpx
 ```
 
-### 5.2 Sample Client Code
+### 6.2 Sample Client Code
 
 ```python
 import httpx
@@ -639,9 +848,9 @@ async def main():
 
 ---
 
-## 6. Error Handling
+## 7. Error Handling
 
-### 6.1 Common HTTP Status Codes
+### 7.1 Common HTTP Status Codes
 
 | Code | Meaning | Action |
 |------|---------|--------|
@@ -655,7 +864,7 @@ async def main():
 | `500` | Internal Server Error | Contact support |
 | `503` | Service Unavailable | Check service health |
 
-### 6.2 Error Response Format
+### 7.2 Error Response Format
 
 ```json
 {
@@ -674,23 +883,23 @@ async def main():
 
 ---
 
-## 7. Best Practices
+## 8. Best Practices
 
-### 7.1 Performance Optimization
+### 8.1 Performance Optimization
 
 1. **Reuse OCR Results**: Always provide `document_id` for images to leverage OCR caching
 2. **Batch Operations**: Group related requests when possible
 3. **Connection Pooling**: Use HTTP connection pooling in your client
 4. **Async Processing**: Use async clients for high-throughput scenarios
 
-### 7.2 Security Recommendations
+### 8.2 Security Recommendations
 
 1. **API Key Management**: Store API keys securely, never in source code
 2. **HTTPS Only**: Always use HTTPS in production
 3. **Tenant Isolation**: Ensure proper `tenant_id` segregation
 4. **PHI Handling**: Encrypt sensitive data in transit and at rest
 
-### 7.3 Rate Limiting
+### 8.3 Rate Limiting
 
 Implement exponential backoff for retries:
 
@@ -711,9 +920,9 @@ async def retry_with_backoff(func, max_retries=3):
 
 ---
 
-## 8. Monitoring & Observability
+## 9. Monitoring & Observability
 
-### 8.1 Health Endpoints
+### 9.1 Health Endpoints
 
 ```bash
 # Basic health check
@@ -726,7 +935,7 @@ curl http://localhost/api/v1/readiness
 curl http://localhost/api/v1/metrics
 ```
 
-### 8.2 Key Metrics
+### 9.2 Key Metrics
 
 - **Request Latency**: Track `latency_ms` in responses
 - **OCR Cache Hit Rate**: Monitor `ocr_reused` field
@@ -735,7 +944,7 @@ curl http://localhost/api/v1/metrics
 
 ---
 
-## 9. Support & Resources
+## 10. Support & Resources
 
 | Resource | Location |
 |----------|----------|
@@ -746,7 +955,7 @@ curl http://localhost/api/v1/metrics
 
 ---
 
-## 10. Quick Reference Card
+## 11. Quick Reference Card
 
 ```bash
 # Health Check
