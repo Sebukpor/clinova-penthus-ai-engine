@@ -210,8 +210,7 @@ async def authenticate_request(
 
     # Try API key authentication first
     if api_key:
-        # In production, validate against database or OCI Vault
-        # For now, implement a basic validation structure
+        # For now we, implement a basic validation structure
         user = await _validate_api_key(api_key)
         if user:
             logger.debug("api_key_auth_success", user_id=user.user_id, tenant_id=user.tenant_id)
