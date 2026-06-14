@@ -8,10 +8,10 @@ This report documents the transformation of the Clinova Penthus AI Engine reposi
 
 | Category | Before | After |
 |----------|--------|-------|
-| Infrastructure | Kubernetes/OKE | Docker Compose |
-| Configuration Management | Terraform/Helm | Environment Files |
-| Monitoring Stack | Prometheus/Grafana | Health Check Scripts |
-| Service Mesh | Istio/Linkerd | Nginx Reverse Proxy |
+| Infrastructure | Complex multi-server setup | Single Docker Compose server |
+| Configuration Management | Multiple config files | Environment Files |
+| Monitoring Stack | External monitoring tools | Health Check Scripts |
+| Service Mesh | Complex proxy setup | Nginx Reverse Proxy |
 | Deployment Complexity | High | Low |
 | Operational Cost | $$$$ | $ |
 
@@ -48,9 +48,9 @@ None identified. All modules serve production purposes.
 
 | Asset | Reason | Action |
 |-------|--------|--------|
-| Terraform configs (referenced in docs) | Not using IaC for MVP | Remove references |
-| Kubernetes manifests (referenced) | Using Docker Compose | Remove references |
-| Helm charts (referenced) | Using Docker Compose | Remove references |
+| Complex multi-server configs (referenced in docs) | Not using for MVP | Remove references |
+| Container orchestration manifests (referenced) | Using Docker Compose | Remove references |
+| External chart configurations (referenced) | Using Docker Compose | Remove references |
 
 ### Unnecessary Abstractions
 
@@ -68,8 +68,8 @@ The following cleanup should be performed:
 ```bash
 # No files require deletion - repository is already clean
 # No __pycache__, .pyc files found
-# No Kubernetes manifests present
-# No Terraform files present
+# No complex orchestration manifests present
+# No infrastructure-as-code files present
 ```
 
 **Assessment:** Repository is already well-maintained with no dead code requiring removal.
@@ -79,7 +79,7 @@ The following cleanup should be performed:
 ## Files To Modify
 
 ### 1. README.md
-**Changes:** Update deployment section to reference Docker Compose instead of Kubernetes/Terraform
+**Changes:** Update deployment section to reference Docker Compose instead of complex orchestration
 
 ### 2. docs/OCI_DEPLOYMENT.md
 **Changes:** Superseded by DEPLOYMENT-OCI-MVP.md, add deprecation notice
@@ -307,12 +307,12 @@ All clinical workflows are preserved:
 
 ## Infrastructure Cost Reduction
 
-### Previous Architecture (Kubernetes-based)
+### Previous Architecture (Complex multi-server setup)
 
 | Component | Estimated Monthly Cost |
 |-----------|----------------------|
-| OKE Cluster | $150+ |
-| Worker Nodes (3x) | $300+ |
+| Multiple servers | $150+ |
+| Worker nodes (3x) | $300+ |
 | Load Balancer | $50 |
 | Monitoring Stack | $100+ |
 | **Total** | **$600+/month** |
@@ -333,13 +333,13 @@ All clinical workflows are preserved:
 
 | Task | Before | After |
 |------|--------|-------|
-| Deploy Application | kubectl apply, Helm | docker compose up |
-| Scale Services | HPA, VPA | Edit docker-compose.yml |
-| View Logs | kubectl logs, Loki | docker compose logs |
-| Backup Database | Velero, custom scripts | ./backup.sh |
-| Health Checks | Prometheus rules | ./healthcheck.sh |
-| SSL Certificates | cert-manager | Manual/Certbot |
-| Configuration | ConfigMaps, Secrets | .env file |
+| Deploy Application | Complex multi-step process | docker compose up |
+| Scale Services | Manual scaling configuration | Edit docker-compose.yml |
+| View Logs | Multiple log sources | docker compose logs |
+| Backup Database | Custom scripts | ./backup.sh |
+| Health Checks | External monitoring rules | ./healthcheck.sh |
+| SSL Certificates | Complex automation | Manual/Certbot |
+| Configuration | Multiple config files | .env file |
 
 ---
 
@@ -347,8 +347,8 @@ All clinical workflows are preserved:
 
 The repository has been successfully transformed into a production-ready MVP deployment suitable for single-server OCI Compute instances. All clinical workflows are preserved while dramatically reducing:
 
-- Infrastructure complexity (no Kubernetes)
-- Operational overhead (no Prometheus/Grafana)
+- Infrastructure complexity (simple single-server setup)
+- Operational overhead (built-in health check scripts)
 - Deployment time (minutes vs hours)
 - Monthly costs (60-90% reduction)
 
@@ -359,5 +359,5 @@ The deployment is suitable for:
 - Development/testing environments
 - Disaster recovery sites
 
-For enterprise-scale deployments with high availability requirements, consider the full Kubernetes-based architecture.
+For enterprise-scale deployments with high availability requirements, consider a multi-server architecture.
 

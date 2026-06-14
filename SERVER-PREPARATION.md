@@ -8,7 +8,7 @@ This guide prepares an OCI Compute VM for deploying the Clinova Penthus AI Engin
 
 **Target Environment:** Single OCI Compute Instance (GPU or CPU)
 **Deployment Method:** Docker Compose
-**No Kubernetes, Terraform, or Helm required**
+**Simple, straightforward deployment without complex orchestration tools**
 
 ---
 
