@@ -213,7 +213,7 @@ Application foundation:
 - **`errors.py`** - Custom exception hierarchy
 - **`logging.py`** - Structured logging with structlog
 - **`security.py`** - JWT authentication, API keys, RBAC
-- **`observability.py`** - OpenTelemetry tracing, Prometheus metrics
+- **`observability.py`** - OpenTelemetry tracing, structured logging
 
 ### 12. Workers (`app/workers/`)
 
@@ -234,8 +234,8 @@ Background job processing:
 | **Model Serving** | vLLM (OpenAI-compatible API) |
 | **Base Model** | DAS medhub Penthus model |
 | **Object Storage** | OCI Object Storage / MinIO |
-| **Observability** | OpenTelemetry + Prometheus + Grafana |
-| **Container** | Docker + Kubernetes (OKE) |
+| **Observability** | OpenTelemetry + Structured Logging |
+| **Container** | Docker + Docker Compose |
 | **Cloud** | Oracle Cloud Infrastructure (OCI) |
 
 ---
@@ -305,7 +305,7 @@ clinova-penthus-ai-engine/
 │   ├── gaps.v1.yaml
 │   ├── translation.v1.yaml
 │   └── fhir.v1.yaml
-├── infra/                      # Infrastructure as Code
+├── infra/                      # Infrastructure Configuration
 │   ├── docker/                 # Dockerfiles
 │   │   ├── api.Dockerfile
 │   │   └── vllm.Dockerfile
@@ -503,7 +503,6 @@ curl http://localhost:8000/api/v1/readiness
 | GET | `/api/v1/documents/{id}/ocr` | Get OCR result |
 | GET | `/api/v1/health` | Health check |
 | GET | `/api/v1/readiness` | Readiness check |
-| GET | `/api/v1/metrics` | Prometheus metrics |
 
 ---
 
@@ -695,7 +694,7 @@ curl http://localhost/api/v1/health
 Internet → Nginx → FastAPI → PostgreSQL + Redis + vLLM
 ```
 
-All services run on a single OCI VM via Docker Compose. No Kubernetes required.
+All services run on a single OCI VM via Docker Compose.
 
 ### Requirements
 
@@ -703,53 +702,6 @@ All services run on a single OCI VM via Docker Compose. No Kubernetes required.
 - 50GB+ disk space
 - Docker and Docker Compose
 - HuggingFace token for model download
-
----
-
-## Enterprise Deployment - OKE/Kubernetes
-
-For enterprise-scale deployments requiring high availability:
-
-### Prerequisites
-
-- OCI CLI configured
-- Terraform 1.5+
-- kubectl
-- Access to OCI Tenancy
-
-### Deployment Steps
-
-1. **Configure Terraform variables**:
-```bash
-cd infra/terraform/oci
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your OCI credentials
-```
-
-2. **Initialize and apply**:
-```bash
-terraform init
-terraform plan
-terraform apply
-```
-
-3. **Configure kubectl**:
-```bash
-oci ce cluster create-kubeconfig --cluster-id <cluster-ocid> --file $HOME/.kube/config --region us-ashburn-1
-```
-
-4. **Deploy application**:
-```bash
-kubectl apply -f infra/k8s/configmap.yaml
-kubectl apply -f infra/k8s/secrets.yaml  # Configure secrets first
-kubectl apply -f infra/k8s/
-```
-
-5. **Verify deployment**:
-```bash
-kubectl get pods -n clinova
-kubectl get svc -n clinova
-```
 
 ---
 
@@ -809,18 +761,25 @@ pytest -m integration
 
 ## Observability
 
-### Metrics
+### Logging & Tracing
 
-- `clinova_workflow_latency_ms` - Per-workflow latency
-- `clinova_vllm_latency_ms` - vLLM inference latency
-- `clinova_vllm_tokens_total` - Token usage
-- `clinova_ocr_cache_hit_total` - OCR cache hit/miss
-- `clinova_terminology_cache_hit_total` - Terminology cache
-- `clinova_workflow_errors_total` - Error rates
-- `clinova_validation_failures_total` - Validation failures
-- `clinova_tenant_requests_total` - Per-tenant traffic
+The application provides comprehensive observability through:
 
-### Tracing
+- **Structured Logging**: All events logged in JSON format using structlog
+- **OpenTelemetry Tracing**: Distributed traces across all workflow components
+- **Audit Logging**: Complete audit trail for PHI access and AI inferences
+
+### Key Logged Events
+
+- Workflow execution (latency, tokens, outcomes)
+- vLLM inference calls
+- OCR cache hits/misses
+- Terminology service lookups
+- Validation failures
+- Authentication and authorization events
+- Tenant isolation enforcement
+
+### Tracing Coverage
 
 OpenTelemetry traces across:
 - Gateway request
@@ -833,14 +792,9 @@ OpenTelemetry traces across:
 - Persistence
 - Terminology lookup
 
-### Dashboards
+### Log Aggregation
 
-- Clinical workflow latency by endpoint
-- OCR cache hit ratio
-- vLLM throughput and token latency
-- GPU utilization
-- Endpoint error rate
-- Tenant traffic
+Logs can be forwarded to external log aggregation services (e.g., ELK Stack, Loki, Cloud Logging) via standard stdout/stderr streams.
 
 ---
 
