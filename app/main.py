@@ -85,9 +85,9 @@ def create_application() -> FastAPI:
             "summarization, translation, FHIR extraction, and clinical normalization."
         ),
         version=settings.app_version,
-        docs_url="/docs" if settings.is_development else None,
-        redoc_url="/redoc" if settings.is_development else None,
-        openapi_url="/openapi.json" if settings.is_development else None,
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
         lifespan=lifespan,
     )
 

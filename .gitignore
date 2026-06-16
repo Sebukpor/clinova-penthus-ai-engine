@@ -1,2 +1,1 @@
-# Documentation
-docs/SECURITY_HARDENING.md
+Nothing should be ignored based on the provided file changes. The modification of 'app/main.py' is a source code file and does not require any new ignore rules.
