@@ -113,6 +113,7 @@ class ClinicalAIOrchestrator:
             ocr_reused = False
             raw_text = request.text
 
+            logger.info("DEBUG_OCR_CHECK", requires_ocr=config.requires_ocr, has_image=bool(request.image), image_len=len(request.image) if request.image else 0)
             if config.requires_ocr and request.image:
                 content_hash = await self._get_or_compute_hash(request)
                 ocr_result, ocr_reused = await self.ocr.resolve(
@@ -203,10 +204,10 @@ class ClinicalAIOrchestrator:
             return (ocr_result or {"raw_text": raw_text}, warnings) if ocr_result else ({"raw_text": raw_text}, warnings)
 
         elif workflow_type == WorkflowType.SOAP:
-            return await self._run_ai_workflow("soap", {"raw_text": raw_text}, request_id, request)
+            return await self._run_ai_workflow("soap", {"raw_text": raw_text, "language": request.language, "document_id": request.document_id, "specialty": getattr(request, "specialty", "general")}, request_id, request)
 
         elif workflow_type == WorkflowType.ENTITIES:
-            return await self._run_ai_workflow("entities", {"raw_text": raw_text}, request_id, request)
+            return await self._run_ai_workflow("entities", {"raw_text": raw_text, "language": request.language or "en"}, request_id, request)
 
         elif workflow_type == WorkflowType.NORMALIZATION:
             # Get entities first if available
@@ -298,9 +299,18 @@ class ClinicalAIOrchestrator:
 
             # Parse as generic dict for flexibility
             from app.llm.json_repair import safe_json_loads
-            result = safe_json_loads(response.content)
+            import re
+            raw = response.content
+            # Strip reasoning tags e.g. <think>...</think>
+            raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            # Extract JSON from markdown fences if present
+            fence = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
+            if fence:
+                raw = fence.group(1).strip()
+            result = safe_json_loads(raw)
             if result is None:
-                raise ValueError(f"Failed to parse {capability} output")
+                # Last resort: return raw text as data
+                result = {"raw_text": response.content, "data": raw}
             return result, warnings
 
         except Exception as e:
