@@ -201,7 +201,21 @@ class ClinicalAIOrchestrator:
         warnings: List[str] = []
 
         if workflow_type == WorkflowType.OCR:
-            return (ocr_result or {"raw_text": raw_text}, warnings) if ocr_result else ({"raw_text": raw_text}, warnings)
+            if not ocr_result and request.image:
+                content_hash = await self._get_or_compute_hash(request)
+                ocr_result, _ = await self.ocr.resolve(
+                    tenant_id=request.tenant_id,
+                    encounter_id=request.encounter_id,
+                    document_id=request.document_id or request.encounter_id,
+                    content_hash=content_hash,
+                    image=request.image,
+                    text=request.text,
+                    language=request.language,
+                    force_rerun=request.force_rerun_ocr,
+                    request_id=request_id,
+                    mime_type=request.mime_type,
+                )
+            return (ocr_result or {"raw_text": raw_text or ""}, warnings)
 
         elif workflow_type == WorkflowType.SOAP:
             return await self._run_ai_workflow("soap", {"raw_text": raw_text, "language": request.language, "document_id": request.document_id, "specialty": getattr(request, "specialty", "general")}, request_id, request)

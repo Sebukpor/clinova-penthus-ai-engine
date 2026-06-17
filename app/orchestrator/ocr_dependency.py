@@ -23,34 +23,39 @@ def transform_clinical_to_api_schema(clinical_dict: dict, doc_id: str, lang: str
     Transforms the model's clinical JSON output into the standardized API schema.
     It stringifies the clinical data into 'raw_text' so downstream workflows can still process it.
     """
-    import json
-    
     # 1. Create a highly readable 'raw_text' from the clinical JSON
     lines = []
     for section, data in clinical_dict.items():
-        lines.append(f"\n--- {section.upper().replace('_', ' ')} ---")
+        section_lines = []
         if isinstance(data, dict):
             for k, v in data.items():
-                if v and v != "": 
-                    lines.append(f"{k.replace('_', ' ').title()}: {v}")
+                if v is not None and v != "" and v is not False:
+                    section_lines.append(f"{k.replace('_', ' ').title()}: {v}")
         elif isinstance(data, list):
             for item in data:
                 if isinstance(item, dict):
-                    lines.append(" - " + " | ".join(f"{k}: {v}" for k, v in item.items() if v))
-                else:
-                    lines.append(f" - {item}")
+                    row = " | ".join(f"{k}: {v}" for k, v in item.items() if v is not None and v != "")
+                    if row:
+                        section_lines.append(" - " + row)
+                elif item:
+                    section_lines.append(f" - {item}")
         else:
-            if data: lines.append(str(data))
-            
+            if data is not None and data != "" and data is not False:
+                section_lines.append(str(data))
+
+        if section_lines:
+            lines.append(f"\n--- {section.upper().replace('_', ' ')} ---")
+            lines.extend(section_lines)
+
     raw_text = "\n".join(lines)
-    
+
     # 2. Extract key entities for the 'entities' list
     entities = []
     if clinical_dict.get("patient_demographics", {}).get("patient_name"):
         entities.append({"type": "PATIENT_NAME", "text": clinical_dict["patient_demographics"]["patient_name"], "confidence": 0.95})
     if clinical_dict.get("doctor_details", {}).get("name_stamp"):
         entities.append({"type": "DOCTOR_NAME", "text": clinical_dict["doctor_details"]["name_stamp"], "confidence": 0.95})
-        
+
     # 3. Return the exact structure the Pydantic schema expects
     return {
         "document_id": doc_id,
