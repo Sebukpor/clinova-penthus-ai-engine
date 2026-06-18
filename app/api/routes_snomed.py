@@ -20,7 +20,11 @@ router = APIRouter()
     response_model=ClinicalResponse,
     status_code=status.HTTP_200_OK,
     summary="SNOMED CT Mapping",
-    description="Normalize clinical terms and return SNOMED CT candidates via terminology gateway.",
+    description=(
+        "Two-step workflow: (1) AI model normalizes clinical terms and abbreviations, "
+        "(2) Normalized terms are sent to the SNOMED CT terminology gateway to retrieve concept candidates. "
+        "The AI does NOT assign codes — codes come from the external SNOMED CT service."
+    ),
     openapi_extra={
         "requestBody": {
             "content": {
@@ -52,6 +56,11 @@ router = APIRouter()
                             },
                             "result": {
                                 "system": "SNOMED_CT",
+                                "query_terms": [
+                                    "Refractive error",
+                                    "Presbyopia",
+                                    "Elevated intraocular pressure",
+                                ],
                                 "normalized_terms": [
                                     {"source_text": "refractive error", "normalized_text": "Refractive error"},
                                     {"source_text": "presbyopia", "normalized_text": "Presbyopia"},
@@ -62,6 +71,9 @@ router = APIRouter()
                                     {"term": "Presbyopia", "code": "41256004", "system": "SNOMED_CT", "score": 0.99},
                                     {"term": "Elevated intraocular pressure", "code": "24075007", "system": "SNOMED_CT", "score": 0.91},
                                 ],
+                                "ai_normalized": True,
+                                "terminology_service_available": True,
+                                "warning": None,
                             },
                             "warnings": [],
                             "latency_ms": 16800,
@@ -83,13 +95,14 @@ async def snomed_mapping(
     """
     SNOMED CT mapping endpoint.
 
-    1. Resolves OCR if image provided
-    2. Extracts entities if needed
-    3. Normalizes terms via AI model
-    4. Calls terminology gateway for SNOMED CT candidates
-    5. Returns normalized terms + candidates
+    Step 1 — AI normalization: The model normalizes clinical abbreviations and
+    terms into canonical forms (e.g. 'IOP' → 'Intraocular Pressure').
 
-    The AI model normalizes terms but does NOT assign final SNOMED CT codes.
+    Step 2 — Terminology gateway: Normalized terms are sent to the SNOMED CT
+    external service which returns concept candidates with codes and confidence scores.
+
+    Note: If the terminology gateway is unavailable, normalized terms are returned
+    without codes and a warning is included in the response.
     """
     settings = get_settings()
     if not settings.features.snomed_endpoint:
@@ -100,7 +113,9 @@ async def snomed_mapping(
             document_id=request.document_id,
             workflow="snomed",
             model={"repo_id": "", "prompt_version": "", "model_version": ""},
-            result={"normalized_terms": [], "candidates": [], "system": "SNOMED_CT"},
+            result={"normalized_terms": [], "candidates": [], "system": "SNOMED_CT",
+                    "query_terms": [], "ai_normalized": False,
+                    "terminology_service_available": False, "warning": None},
             warnings=["SNOMED CT mapping is disabled"],
             latency_ms=0,
         )

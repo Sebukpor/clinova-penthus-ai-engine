@@ -20,7 +20,11 @@ router = APIRouter()
     response_model=ClinicalResponse,
     status_code=status.HTTP_200_OK,
     summary="ICD-11 Coding",
-    description="Normalize clinical terms and return ICD-11 candidates via terminology gateway.",
+    description=(
+        "Two-step workflow: (1) AI model normalizes clinical terms and abbreviations, "
+        "(2) Normalized terms are sent to the ICD-11 terminology gateway to retrieve code candidates. "
+        "The AI does NOT assign codes — codes come from the external ICD-11 service."
+    ),
     openapi_extra={
         "requestBody": {
             "content": {
@@ -52,15 +56,24 @@ router = APIRouter()
                             },
                             "result": {
                                 "system": "ICD11",
+                                "query_terms": [
+                                    "Refractive error of eye",
+                                    "Presbyopia",
+                                    "Elevated intraocular pressure",
+                                ],
                                 "normalized_terms": [
                                     {"source_text": "refractive error", "normalized_text": "Refractive error of eye"},
                                     {"source_text": "presbyopia", "normalized_text": "Presbyopia"},
+                                    {"source_text": "raised IOP", "normalized_text": "Elevated intraocular pressure"},
                                 ],
                                 "candidates": [
                                     {"term": "Refractive error of eye", "code": "9D00", "system": "ICD11", "score": 0.95},
                                     {"term": "Presbyopia", "code": "9D01.2", "system": "ICD11", "score": 0.98},
                                     {"term": "Elevated intraocular pressure", "code": "9C61", "system": "ICD11", "score": 0.88},
                                 ],
+                                "ai_normalized": True,
+                                "terminology_service_available": True,
+                                "warning": None,
                             },
                             "warnings": [],
                             "latency_ms": 15300,
@@ -82,13 +95,14 @@ async def icd_coding(
     """
     ICD-11 coding endpoint.
 
-    1. Resolves OCR if image provided
-    2. Extracts entities if needed
-    3. Normalizes terms via AI model
-    4. Calls terminology gateway for ICD-11 candidates
-    5. Returns normalized terms + ICD-11 candidates
+    Step 1 — AI normalization: The model normalizes clinical abbreviations and
+    terms into canonical forms (e.g. 'SOB' → 'Shortness of breath').
 
-    The AI model normalizes terms but does NOT assign final ICD-11 codes.
+    Step 2 — Terminology gateway: Normalized terms are sent to the ICD-11
+    external service which returns code candidates with confidence scores.
+
+    Note: If the terminology gateway is unavailable, normalized terms are returned
+    without codes and a warning is included in the response.
     """
     settings = get_settings()
     if not settings.features.icd_endpoint:
@@ -99,7 +113,9 @@ async def icd_coding(
             document_id=request.document_id,
             workflow="icd",
             model={"repo_id": "", "prompt_version": "", "model_version": ""},
-            result={"normalized_terms": [], "candidates": [], "system": "ICD11"},
+            result={"normalized_terms": [], "candidates": [], "system": "ICD11",
+                    "query_terms": [], "ai_normalized": False,
+                    "terminology_service_available": False, "warning": None},
             warnings=["ICD-11 coding is disabled"],
             latency_ms=0,
         )
