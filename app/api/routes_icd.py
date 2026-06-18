@@ -21,6 +21,56 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     summary="ICD-11 Coding",
     description="Normalize clinical terms and return ICD-11 candidates via terminology gateway.",
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                        "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "image": "data:image/jpeg;base64,/9j/4AAQ...(base64 encoded image)",
+                        "language": "en",
+                    }
+                }
+            }
+        },
+        "responses": {
+            "200": {
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "request_id": "b3c4d5e6f7a2",
+                            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                            "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                            "workflow": "icd",
+                            "model": {
+                                "repo_id": "Sebukpor/medical-document-understanding-v2-fixed",
+                                "prompt_version": "normalization.v1",
+                                "model_version": "penthus-1.2-alpha-4b",
+                            },
+                            "result": {
+                                "system": "ICD11",
+                                "normalized_terms": [
+                                    {"source_text": "refractive error", "normalized_text": "Refractive error of eye"},
+                                    {"source_text": "presbyopia", "normalized_text": "Presbyopia"},
+                                ],
+                                "candidates": [
+                                    {"term": "Refractive error of eye", "code": "9D00", "system": "ICD11", "score": 0.95},
+                                    {"term": "Presbyopia", "code": "9D01.2", "system": "ICD11", "score": 0.98},
+                                    {"term": "Elevated intraocular pressure", "code": "9C61", "system": "ICD11", "score": 0.88},
+                                ],
+                            },
+                            "warnings": [],
+                            "latency_ms": 15300,
+                            "ocr_reused": True,
+                        }
+                    }
+                }
+            }
+        },
+    },
 )
 async def icd_coding(
     request: ClinicalRequest,

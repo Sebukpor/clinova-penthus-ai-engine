@@ -21,6 +21,59 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     summary="Documentation Gap Detection",
     description="Identify missing information and quality issues in clinical documentation.",
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                        "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "image": "data:image/jpeg;base64,/9j/4AAQ...(base64 encoded image)",
+                        "language": "en",
+                    }
+                }
+            }
+        },
+        "responses": {
+            "200": {
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "request_id": "d4e5f6a1b2c3",
+                            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                            "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                            "workflow": "gaps",
+                            "model": {
+                                "repo_id": "Sebukpor/medical-document-understanding-v2-fixed",
+                                "prompt_version": "gaps.v1",
+                                "model_version": "penthus-1.2-alpha-4b",
+                            },
+                            "result": {
+                                "gaps": [
+                                    {"category": "demographics", "description": "Patient name not documented", "priority": "high"},
+                                    {"category": "demographics", "description": "Patient age/sex not recorded", "priority": "high"},
+                                    {"category": "history", "description": "Chief complaint / presenting complaint missing", "priority": "medium"},
+                                    {"category": "history", "description": "Allergy status not documented", "priority": "medium"},
+                                    {"category": "vitals", "description": "Blood pressure not recorded", "priority": "low"},
+                                ],
+                                "completeness_score": 0.62,
+                                "recommendations": [
+                                    "Add patient demographics before filing",
+                                    "Document chief complaint",
+                                    "Record allergy status",
+                                ],
+                            },
+                            "warnings": [],
+                            "latency_ms": 11200,
+                            "ocr_reused": True,
+                        }
+                    }
+                }
+            }
+        },
+    },
 )
 async def gap_detection(
     request: ClinicalRequest,

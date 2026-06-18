@@ -20,6 +20,53 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     summary="Clinical Term Normalization",
     description="Normalize clinical terms to canonical forms. Does NOT assign standardized codes.",
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                        "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "image": "data:image/jpeg;base64,/9j/4AAQ...(base64 encoded image)",
+                        "language": "en",
+                    }
+                }
+            }
+        },
+        "responses": {
+            "200": {
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "request_id": "b2c3d4e5f6a1",
+                            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                            "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                            "workflow": "normalization",
+                            "model": {
+                                "repo_id": "Sebukpor/medical-document-understanding-v2-fixed",
+                                "prompt_version": "normalization.v1",
+                                "model_version": "penthus-1.2-alpha-4b",
+                            },
+                            "result": {
+                                "normalized_terms": [
+                                    {"source_text": "IOP", "normalized_text": "Intraocular Pressure", "category": "measurement"},
+                                    {"source_text": "VA", "normalized_text": "Visual Acuity", "category": "measurement"},
+                                    {"source_text": "AR", "normalized_text": "Auto-Refraction", "category": "procedure"},
+                                    {"source_text": "6TID", "normalized_text": "6 times daily", "category": "frequency"},
+                                    {"source_text": "TEAR", "normalized_text": "Topical eye administration", "category": "route"},
+                                ]
+                            },
+                            "warnings": [],
+                            "latency_ms": 9800,
+                            "ocr_reused": True,
+                        }
+                    }
+                }
+            }
+        },
+    },
 )
 async def term_normalization(
     request: ClinicalRequest,
