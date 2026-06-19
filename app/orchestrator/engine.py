@@ -389,6 +389,11 @@ class ClinicalAIOrchestrator:
             "terminology_service_available": len(candidates) > 0,
             "warning": warnings[0] if warnings else None,
         }
+        # Store candidates by system key for FHIR to pick up from context
+        if system == "SNOMED_CT":
+            result["snomed_candidates"] = candidates
+        elif system == "ICD11":
+            result["icd_candidates"] = candidates
 
         return result, warnings
 
@@ -402,16 +407,29 @@ class ClinicalAIOrchestrator:
         """Run FHIR resource generation workflow."""
         warnings: List[str] = []
 
-        # Get prerequisite data
-        soap = ctx.get("soap", {})
+        # Get prerequisite data - normalize soap to dict
+        soap_raw = ctx.get("soap", {})
+        if isinstance(soap_raw, str):
+            soap = {}
+        elif isinstance(soap_raw, dict):
+            # soap may be nested under "data" key
+            soap = soap_raw.get("data", soap_raw)
+        else:
+            soap = {}
         entities = ctx.get("entities", [])
+        if isinstance(entities, dict):
+            entities = entities.get("entities", [])
         normalized_terms = ctx.get("normalized_terms", [])
+        if isinstance(normalized_terms, dict):
+            normalized_terms = normalized_terms.get("normalized_terms", [])
 
         # Build variables
         variables = {
             "soap": soap,
             "entities": entities,
             "normalized_terms": normalized_terms,
+            "snomed_candidates": ctx.get("snomed_candidates", []),
+            "icd_candidates": ctx.get("icd_candidates", []),
             "patient_id": request.patient_id,
             "encounter_id": request.encounter_id,
         }

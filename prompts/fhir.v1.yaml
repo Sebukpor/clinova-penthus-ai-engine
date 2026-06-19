@@ -18,10 +18,10 @@ template: |
 
   {% if soap %}
   SOAP Note:
-  - Subjective: {{ soap.subjective | truncate(800) }}
-  - Objective: {{ soap.objective | truncate(800) }}
-  - Assessment: {{ soap.assessment | truncate(400) }}
-  - Plan: {{ soap.plan | truncate(400) }}
+  - Subjective: {{ soap.subjective | default('') | truncate(800) }}
+  - Objective: {{ soap.objective | default('') | truncate(800) }}
+  - Assessment: {{ soap.assessment | default('') | truncate(400) }}
+  - Plan: {{ soap.plan | default('') | truncate(400) }}
   {% endif %}
   {% if entities %}
   Clinical entities:
@@ -30,6 +30,14 @@ template: |
   {% if normalized_terms %}
   Normalized terms:
   {{ normalized_terms | json }}
+  {% endif %}
+  {% if snomed_candidates %}
+  SNOMED CT codes (use these for Condition and Observation coding):
+  {{ snomed_candidates | json }}
+  {% endif %}
+  {% if icd_candidates %}
+  ICD-11 codes (use these for Condition coding):
+  {{ icd_candidates | json }}
   {% endif %}
   {% if patient_id %}
   Patient reference: {{ patient_id }}
@@ -62,6 +70,8 @@ variables:
   - soap
   - entities
   - normalized_terms
+  - snomed_candidates
+  - icd_candidates
   - patient_id
   - encounter_id
 is_ocr_breaking: false
