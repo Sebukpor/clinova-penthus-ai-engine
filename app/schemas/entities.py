@@ -12,7 +12,6 @@ class ClinicalEntity(BaseModel):
     text: str = Field(..., description="Original text span")
     type: str = Field(..., description="Entity type classification")
     normalized_text: Optional[str] = Field(default=None, description="Normalized/canonical form")
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Extraction confidence")
     source_span: Optional[str] = Field(default=None, description="Source context span")
 
     model_config = {
@@ -21,7 +20,6 @@ class ClinicalEntity(BaseModel):
                 "text": "fever",
                 "type": "symptom",
                 "normalized_text": "fever",
-                "confidence": 0.97,
                 "source_span": "Patient has fever for 3 days",
             }
         }

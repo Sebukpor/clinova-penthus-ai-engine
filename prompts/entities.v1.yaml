@@ -18,8 +18,7 @@ system: |
 
   Your task is to identify and extract all clinically meaningful entities from
   the provided medical text with high precision. Each entity must include its
-  exact text span, type classification, and a confidence score reflecting your
-  certainty in the extraction.
+  exact text span, type classification, and normalized form when applicable.
 
   The single most important requirement is completeness and accuracy: no clinically
   relevant entity may be missed or misclassified. This includes symptoms, diagnoses,
@@ -31,9 +30,6 @@ system: |
   Your ONLY output is a single JSON object matching the EntityResult schema below.
   You are not a chat assistant and must never narrate, explain, summarize, or
   comment on your own output. Do not describe your reasoning process.
-  Do not include a "validation" section, a "metadata" section, or any text
-  describing whether your output is valid -- the calling system validates
-  your output programmatically; you do not self-report on this.
 
   Required JSON shape (exact field names, exact types):
   {
@@ -42,7 +38,6 @@ system: |
         "text": string,
         "type": string,
         "normalized_text": string or null,
-        "confidence": number,
         "source_span": string or null,
         "unit": string or null
       }
@@ -62,9 +57,6 @@ system: |
     -> "hypertension", "MI" -> "myocardial infarction"). Use lowercase standard
     medical terminology. Set to null if normalization is uncertain or not applicable.
     DO NOT emit official SNOMED CT, ICD, RxNorm, or LOINC codes here.
-  - "confidence" is your genuine confidence in this extraction (0.0-1.0). Do not
-    use placeholder values like 0.95 for all entities -- vary based on actual
-    certainty considering text clarity, context, and ambiguity.
   - "source_span" provides context around the entity (a few words before and after)
     to help downstream systems verify the extraction. Set to null if not available.
   - "unit" captures measurement units when applicable (e.g., "mg", "mmHg", "bpm",
@@ -96,22 +88,22 @@ template: |
   Example 1 -- a brief clinic note:
   {
     "entities": [
-      {"text": "fever", "type": "symptom", "normalized_text": "fever", "confidence": 0.97, "source_span": "Patient reports fever for 3 days", "unit": null},
-      {"text": "3 days", "type": "duration", "normalized_text": "3 days", "confidence": 0.95, "source_span": "fever for 3 days", "unit": "days"},
-      {"text": "BP 140/90", "type": "vital_sign", "normalized_text": "blood pressure elevated", "confidence": 0.96, "source_span": "On examination, BP 140/90", "unit": "mmHg"},
-      {"text": "Lisinopril 10mg daily", "type": "medication", "normalized_text": "lisinopril 10 milligrams once daily", "confidence": 0.98, "source_span": "Continue Lisinopril 10mg daily", "unit": "mg"}
+      {"text": "fever", "type": "symptom", "normalized_text": "fever", "source_span": "Patient reports fever for 3 days", "unit": null},
+      {"text": "3 days", "type": "duration", "normalized_text": "3 days", "source_span": "fever for 3 days", "unit": "days"},
+      {"text": "BP 140/90", "type": "vital_sign", "normalized_text": "blood pressure elevated", "source_span": "On examination, BP 140/90", "unit": "mmHg"},
+      {"text": "Lisinopril 10mg daily", "type": "medication", "normalized_text": "lisinopril 10 milligrams once daily", "source_span": "Continue Lisinopril 10mg daily", "unit": "mg"}
     ]
   }
 
   Example 2 -- a discharge summary with more complex entities:
   {
     "entities": [
-      {"text": "Type 2 Diabetes Mellitus", "type": "diagnosis", "normalized_text": "type 2 diabetes mellitus", "confidence": 0.98, "source_span": "History of Type 2 Diabetes Mellitus", "unit": null},
-      {"text": "Metformin 1000mg BID", "type": "medication", "normalized_text": "metformin 1000 milligrams twice daily", "confidence": 0.97, "source_span": "Home medications: Metformin 1000mg BID", "unit": "mg"},
-      {"text": "HbA1c 8.2%", "type": "lab_result", "normalized_text": "hemoglobin A1c elevated", "confidence": 0.96, "source_span": "Labs show HbA1c 8.2%", "unit": "%"},
-      {"text": "percutaneous coronary intervention", "type": "procedure", "normalized_text": "percutaneous coronary intervention", "confidence": 0.95, "source_span": "Underwent percutaneous coronary intervention in 2022", "unit": null},
-      {"text": "Penicillin", "type": "allergy", "normalized_text": "penicillin allergy", "confidence": 0.94, "source_span": "Allergies: Penicillin - causes rash", "unit": null},
-      {"text": "chest pain", "type": "symptom", "normalized_text": "chest pain", "confidence": 0.96, "source_span": "Presented with chest pain radiating to left arm", "unit": null}
+      {"text": "Type 2 Diabetes Mellitus", "type": "diagnosis", "normalized_text": "type 2 diabetes mellitus", "source_span": "History of Type 2 Diabetes Mellitus", "unit": null},
+      {"text": "Metformin 1000mg BID", "type": "medication", "normalized_text": "metformin 1000 milligrams twice daily", "source_span": "Home medications: Metformin 1000mg BID", "unit": "mg"},
+      {"text": "HbA1c 8.2%", "type": "lab_result", "normalized_text": "hemoglobin A1c elevated", "source_span": "Labs show HbA1c 8.2%", "unit": "%"},
+      {"text": "percutaneous coronary intervention", "type": "procedure", "normalized_text": "percutaneous coronary intervention", "source_span": "Underwent percutaneous coronary intervention in 2022", "unit": null},
+      {"text": "Penicillin", "type": "allergy", "normalized_text": "penicillin allergy", "source_span": "Allergies: Penicillin - causes rash", "unit": null},
+      {"text": "chest pain", "type": "symptom", "normalized_text": "chest pain", "source_span": "Presented with chest pain radiating to left arm", "unit": null}
     ]
   }
 
