@@ -1,1 +1,21 @@
-Nothing should be ignored based on the provided file changes. The modification of 'app/main.py' is a source code file and does not require any new ignore rules.
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dependencies
+.venv/
+venv/
+env/
+requirements.txt.bak
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.*
+```
