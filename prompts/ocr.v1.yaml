@@ -29,14 +29,14 @@ template: |
   Medical specialty: {{ specialty }}
   {% endif %}
 
-  Return JSON with this exact structure:
+  Return JSON with this exact structure matching the OCRResult schema:
   {
     "document_id": "{{ document_id }}",
     "raw_text": "<complete extracted text>",
     "entities": [
-      {"text": "<text>", "type": "<symptom|duration|medication|diagnosis|finding|measurement>", "confidence": 0.95}
+      {"text": "<text>", "type": "<symptom|duration|medication|diagnosis|finding|measurement>", "confidence": 0.95, "bbox": null}
     ],
-    "layout": {"pages": 1, "blocks": []},
+    "layout": {"pages": 1, "blocks": [{"type": "paragraph", "text": "block text", "bbox": null, "page": 1}]},
     "language": "<detected language code>",
     "confidence": 0.95
   }
@@ -44,7 +44,9 @@ template: |
   Notes / requirements:
   - Use ISO 8601 format for any dates (e.g., 2024-05-01T14:30:00Z).
   - Include measurement units (e.g., "120 mg").
-  - In `layout.blocks` include page, block and line indices so downstream systems can reconstruct location: {"page": 1, "block_index": 0, "line_index": 3}.
+  - In `layout.blocks` include block type, text content, page number, and optional bounding box so downstream systems can reconstruct location.
+  - Entity types must be one of: symptom, duration, medication, diagnosis, finding, measurement.
+  - Confidence scores must be between 0.0 and 1.0.
 variables:
   - document_id
   - language
