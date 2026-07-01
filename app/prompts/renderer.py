@@ -5,21 +5,61 @@ Jinja2-based prompt template rendering with PHI-safe variable handling.
 
 from typing import Any, Dict
 
-from jinja2 import BaseLoader, Environment, StrictUndefined
+from jinja2 import BaseLoader, Environment, Undefined
 
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
 
+class LenientUndefined(Undefined):
+    """Custom undefined that handles optional variables gracefully in conditional blocks."""
+    
+    def __init__(self, hint=None, obj=Undefined, name=None, exc=Undefined):
+        super().__init__(hint, obj, name, exc)
+    
+    def __str__(self):
+        return ""
+    
+    def __repr__(self):
+        return f"LenientUndefined({self._undefined_name!r})"
+    
+    def __getattr__(self, name):
+        # Allow attribute access on undefined objects (returns another undefined)
+        return type(self)(hint=f"{self._undefined_hint}.{name}", name=name)
+    
+    def __getitem__(self, key):
+        # Allow item access on undefined objects
+        return self
+    
+    def __bool__(self):
+        # Undefined is falsy - this allows {% if variable %} to work
+        return False
+    
+    def __eq__(self, other):
+        # Undefined equals only None or other Undefined
+        return other is None or isinstance(other, LenientUndefined)
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
+    def __iter__(self):
+        # Return empty iterator for undefined
+        return iter([])
+    
+    def __len__(self):
+        return 0
+
+
 class PromptRenderer:
     """Renders prompt templates with variable substitution."""
 
     def __init__(self):
-        # Use StrictUndefined to catch missing variables early
+        # Use LenientUndefined to handle optional variables gracefully
+        # This allows {% if optional_var %} blocks to work without errors
         self.env = Environment(
             loader=BaseLoader(),
-            undefined=StrictUndefined,
+            undefined=LenientUndefined,
             trim_blocks=True,
             lstrip_blocks=True,
             keep_trailing_newline=False,
@@ -29,6 +69,7 @@ class PromptRenderer:
         self.env.filters["truncate"] = self._truncate_filter
         self.env.filters["bullet_list"] = self._bullet_list_filter
         self.env.filters["json"] = self._json_filter
+        self.env.filters["default_if_none"] = self._default_filter
 
     def render(self, template_str: str, variables: Dict[str, Any]) -> str:
         """
@@ -73,6 +114,11 @@ class PromptRenderer:
         """Convert value to JSON string."""
         import json
         return json.dumps(value, indent=2)
+
+    @staticmethod
+    def _default_filter(value: Any, default: Any = "") -> Any:
+        """Return default if value is None or undefined."""
+        return value if value is not None else default
 
 
 class SafeVariableExtractor:
