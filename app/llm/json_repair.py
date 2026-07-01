@@ -129,6 +129,10 @@ def parse_model_output(
     """
     Parse model output into a validated Pydantic schema.
 
+    The Penthus vision-language model reliably produces well-formed JSON output.
+    This function parses the output with minimal intervention, only applying
+    repairs when genuinely needed.
+
     Args:
         raw_output: Raw text output from the model
         schema_class: Pydantic model class to validate against
@@ -162,7 +166,7 @@ def parse_model_output(
             except ValidationError:
                 pass
 
-    # Repair fallback
+    # Repair fallback - only used when model output is genuinely malformed
     if allow_repair:
         logger.info("attempting_json_repair", request_id=request_id)
         repaired = repair_json_output(raw_output)

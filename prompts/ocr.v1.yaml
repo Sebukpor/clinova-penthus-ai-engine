@@ -39,25 +39,21 @@ system: |
   Your ONLY output is a single JSON object matching the OCRResult schema below.
   You are not a chat assistant and must never narrate, explain, summarize, or
   comment on your own output. Do not describe your visual analysis process.
-  Do not include a "validation" section, a "metadata" section, or any text
-  describing whether your output is valid -- the calling system validates
-  your output programmatically; you do not self-report on this.
 
   Required JSON shape (exact field names, exact types):
   {
     "document_id": string,
     "raw_text": string,
     "entities": [
-      {"text": string, "type": string, "confidence": number, "bbox": [x1, y1, x2, y2] or omitted}
+      {"text": string, "type": string}
     ],
     "layout": {
       "pages": integer,
       "blocks": [
-        {"type": string, "text": string, "page": integer, "bbox": [x1, y1, x2, y2] or omitted}
+        {"type": string, "text": string, "page": integer}
       ]
     },
-    "language": string,
-    "confidence": number
+    "language": string
   }
 
   Field rules:
@@ -83,11 +79,7 @@ system: |
     content, a substring of raw_text. Do not leave this as an empty array if
     the document has multiple distinct sections -- segment it according to
     the document's actual visual structure, not a fixed template.
-  - Omit "bbox" entirely on entities and blocks unless you have genuine
-    pixel/coordinate grounding for it; do not fabricate placeholder
-    coordinates.
-  - "confidence" is your genuine confidence in the overall transcription
-    (0.0-1.0), not a placeholder value.
+  - "language" is the detected language of the document (e.g., "en", "es", "fr").
   - If you cannot read part of the document, transcribe what you can and
     note the gap in "raw_text" as [illegible] rather than omitting it
     silently or fabricating content.
@@ -118,9 +110,9 @@ template: |
     "document_id": "example-id-1",
     "raw_text": "ACME CLINIC\n123 Main St\n\nPatient seen for follow-up.\nBP 120/80. Prescribed Amoxicillin 500mg TID x 7 days.\n\nDr. Jane Doe, MD",
     "entities": [
-      {"text": "BP 120/80", "type": "measurement", "confidence": 0.95},
-      {"text": "Amoxicillin 500mg TID x 7 days", "type": "medication", "confidence": 0.97},
-      {"text": "Dr. Jane Doe", "type": "physician_name", "confidence": 0.93}
+      {"text": "BP 120/80", "type": "measurement"},
+      {"text": "Amoxicillin 500mg TID x 7 days", "type": "medication"},
+      {"text": "Dr. Jane Doe", "type": "physician_name"}
     ],
     "layout": {
       "pages": 1,
@@ -130,8 +122,7 @@ template: |
         {"type": "signature", "text": "Dr. Jane Doe, MD", "page": 1}
       ]
     },
-    "language": "en",
-    "confidence": 0.94
+    "language": "en"
   }
 
   Example 2 -- a discharge summary with a different structure entirely:
@@ -139,16 +130,16 @@ template: |
     "document_id": "example-id-2",
     "raw_text": "ST. MARY'S HOSPITAL\nDISCHARGE SUMMARY\n\nPatient: John Smith, Age 54, M\nAdmission Date: 2024-03-10\nDischarge Date: 2024-03-15\n\nDIAGNOSIS: Community-acquired pneumonia\n\nHOSPITAL COURSE: Patient admitted with fever and productive cough. Treated with IV Ceftriaxone 1g daily. Improved clinically by day 4.\n\nDISCHARGE MEDICATIONS:\n1. Amoxicillin-Clavulanate 625mg BID x 5 days\n2. Paracetamol 500mg PRN for fever\n\nALLERGIES: Penicillin (rash)\n\nFOLLOW-UP: Review in pulmonology OPD in 1 week.\n\nDr. Robert Lee, Consultant Physician",
     "entities": [
-      {"text": "John Smith", "type": "patient_name", "confidence": 0.96},
-      {"text": "2024-03-10", "type": "date", "confidence": 0.95},
-      {"text": "2024-03-15", "type": "date", "confidence": 0.95},
-      {"text": "Community-acquired pneumonia", "type": "diagnosis", "confidence": 0.96},
-      {"text": "IV Ceftriaxone 1g daily", "type": "medication", "confidence": 0.95},
-      {"text": "Amoxicillin-Clavulanate 625mg BID x 5 days", "type": "medication", "confidence": 0.97},
-      {"text": "Paracetamol 500mg PRN for fever", "type": "medication", "confidence": 0.94},
-      {"text": "Penicillin (rash)", "type": "allergy", "confidence": 0.93},
-      {"text": "Review in pulmonology OPD in 1 week", "type": "follow_up_instruction", "confidence": 0.9},
-      {"text": "Dr. Robert Lee", "type": "physician_name", "confidence": 0.92}
+      {"text": "John Smith", "type": "patient_name"},
+      {"text": "2024-03-10", "type": "date"},
+      {"text": "2024-03-15", "type": "date"},
+      {"text": "Community-acquired pneumonia", "type": "diagnosis"},
+      {"text": "IV Ceftriaxone 1g daily", "type": "medication"},
+      {"text": "Amoxicillin-Clavulanate 625mg BID x 5 days", "type": "medication"},
+      {"text": "Paracetamol 500mg PRN for fever", "type": "medication"},
+      {"text": "Penicillin (rash)", "type": "allergy"},
+      {"text": "Review in pulmonology OPD in 1 week", "type": "follow_up_instruction"},
+      {"text": "Dr. Robert Lee", "type": "physician_name"}
     ],
     "layout": {
       "pages": 1,
@@ -163,8 +154,7 @@ template: |
         {"type": "signature", "text": "Dr. Robert Lee, Consultant Physician", "page": 1}
       ]
     },
-    "language": "en",
-    "confidence": 0.93
+    "language": "en"
   }
 
   Notice how the two examples have completely different sections, headings,

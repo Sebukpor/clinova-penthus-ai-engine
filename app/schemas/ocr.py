@@ -11,15 +11,12 @@ class OCREntity(BaseModel):
     """Entity extracted during OCR."""
     text: str = Field(..., description="Extracted text")
     type: str = Field(..., description="Entity type (symptom, duration, medication, etc.)")
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score")
-    bbox: Optional[List[float]] = Field(default=None, description="Bounding box [x1, y1, x2, y2]")
 
 
 class OCRLayoutBlock(BaseModel):
     """Layout block from OCR."""
     type: str = Field(..., description="Block type (paragraph, heading, table, etc.)")
     text: str = Field(..., description="Block text content")
-    bbox: Optional[List[float]] = Field(default=None, description="Bounding box")
     page: int = Field(default=1, description="Page number")
 
 
@@ -36,7 +33,6 @@ class OCRResult(BaseModel):
     entities: List[OCREntity] = Field(default_factory=list, description="Extracted entities")
     layout: OCRLayout = Field(default_factory=OCRLayout, description="Document layout")
     language: str = Field(default="en", description="Detected language")
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Overall OCR confidence")
 
     model_config = {
         "json_schema_extra": {
@@ -44,13 +40,12 @@ class OCRResult(BaseModel):
                 "document_id": "doc_001",
                 "raw_text": "Patient has fever for 3 days and cough.",
                 "entities": [
-                    {"text": "fever", "type": "symptom", "confidence": 0.97},
-                    {"text": "3 days", "type": "duration", "confidence": 0.95},
-                    {"text": "cough", "type": "symptom", "confidence": 0.96},
+                    {"text": "fever", "type": "symptom"},
+                    {"text": "3 days", "type": "duration"},
+                    {"text": "cough", "type": "symptom"},
                 ],
                 "layout": {"pages": 1, "blocks": []},
                 "language": "en",
-                "confidence": 0.96,
             }
         }
     }

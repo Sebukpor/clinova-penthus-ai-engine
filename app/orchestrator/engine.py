@@ -14,7 +14,6 @@ from app.core.observability import (
     async_workflow_span,
     record_inference_log,
     record_tenant_request,
-    record_validation_failure,
     record_workflow_error,
 )
 from app.llm.json_repair import parse_model_output
@@ -333,7 +332,6 @@ class ClinicalAIOrchestrator:
                 error=str(e),
                 request_id=request_id,
             )
-            record_validation_failure(capability)
             raise
 
     async def _run_terminology_workflow(
