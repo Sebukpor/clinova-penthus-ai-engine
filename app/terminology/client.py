@@ -120,9 +120,15 @@ class SNOMEDClient:
             
             for item in results[:10]:  # Limit to top 10
                 if isinstance(item, dict):
+                    # SNOMED CT server returns conceptId, conceptFsn, term fields
+                    code = item.get("conceptId", item.get("id", item.get("code", "")))
+                    display = item.get("conceptFsn", item.get("term", item.get("display", "")))
+                    # Strip "(disorder)" etc from display for cleaner output
+                    if display and "(" in display:
+                        display = display[:display.rfind("(")].strip()
                     candidate = {
-                        "code": item.get("id", item.get("code", "")),
-                        "display": item.get("term", item.get("display", item.get("description", ""))),
+                        "code": str(code),
+                        "display": display,
                         "score": float(item.get("score", item.get("matchScore", 0.9))),
                         "source": "SNOMED_CT",
                     }
@@ -300,22 +306,31 @@ class ICD11Client:
             # Format: [version, count, array_of_results, metadata]
             candidates = []
             
-            if isinstance(data, list) and len(data) >= 3:
-                results = data[2]  # Results are in the third element
-                
-                for item in results:
-                    if isinstance(item, list) and len(item) >= 3:
-                        # Format varies, typically: [code, description, category, ...]
+            # NIH Clinical Tables format: [total_count, [codes], null, [[code, display, type], ...]]
+            if isinstance(data, list) and len(data) >= 4 and isinstance(data[3], list):
+                details = data[3]  # Detailed results in index 3
+                for item in details:
+                    if isinstance(item, list) and len(item) >= 2:
                         candidate = {
-                            "code": str(item[0]) if len(item) > 0 else "",
-                            "display": str(item[1]) if len(item) > 1 else str(item[0]),
-                            "score": 0.9,  # NIH doesn't provide scores
+                            "code": str(item[0]),
+                            "display": str(item[1]),
+                            "score": 0.9,
                             "source": "ICD11",
                         }
                         if candidate["code"] and candidate["display"]:
                             candidates.append(candidate)
+            elif isinstance(data, list) and len(data) >= 2 and isinstance(data[1], list):
+                # Fallback: codes in index 1
+                codes = data[1]
+                for code in codes:
+                    candidate = {
+                        "code": str(code),
+                        "display": str(code),
+                        "score": 0.9,
+                        "source": "ICD11",
+                    }
+                    candidates.append(candidate)
             elif isinstance(data, dict):
-                # Alternative response format
                 results = data.get("results", data.get("codes", []))
                 for item in results:
                     if isinstance(item, dict):

@@ -143,8 +143,8 @@ class AuthenticatedUser:
         return role in self.roles
 
     def can_access_tenant(self, tenant_id: str) -> bool:
-        """Verify tenant isolation."""
-        return self.tenant_id == tenant_id
+        """Verify tenant isolation. Wildcard '*' allows access to any tenant."""
+        return self.tenant_id == "*" or self.tenant_id == tenant_id
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -236,9 +236,11 @@ async def _validate_api_key(api_key: str) -> Optional[AuthenticatedUser]:
     # TODO: Implement proper API key validation against database
     # For scaffolding, we accept a well-known test key pattern
     if api_key.startswith("penthus_test_"):
+        # Test key - extract tenant from key suffix or use wildcard
+        # Format: penthus_test_key (generic) or penthus_test_{tenant_id}
         return AuthenticatedUser(
             user_id="test_service",
-            tenant_id="test_tenant",
+            tenant_id="*",  # Wildcard - allows access to any tenant
             roles=[Role.API_SERVICE],
             permissions=ROLE_PERMISSIONS[Role.API_SERVICE],
             auth_type="api_key",

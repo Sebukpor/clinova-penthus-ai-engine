@@ -113,6 +113,7 @@ class ClinicalAIOrchestrator:
             ocr_reused = False
             raw_text = request.text
 
+            logger.info("DEBUG_OCR_CHECK", requires_ocr=config.requires_ocr, has_image=bool(request.image), image_len=len(request.image) if request.image else 0)
             if config.requires_ocr and request.image:
                 content_hash = await self._get_or_compute_hash(request)
                 ocr_result, ocr_reused = await self.ocr.resolve(
@@ -200,13 +201,27 @@ class ClinicalAIOrchestrator:
         warnings: List[str] = []
 
         if workflow_type == WorkflowType.OCR:
-            return (ocr_result or {"raw_text": raw_text}, warnings) if ocr_result else ({"raw_text": raw_text}, warnings)
+            if not ocr_result and request.image:
+                content_hash = await self._get_or_compute_hash(request)
+                ocr_result, _ = await self.ocr.resolve(
+                    tenant_id=request.tenant_id,
+                    encounter_id=request.encounter_id,
+                    document_id=request.document_id or request.encounter_id,
+                    content_hash=content_hash,
+                    image=request.image,
+                    text=request.text,
+                    language=request.language,
+                    force_rerun=request.force_rerun_ocr,
+                    request_id=request_id,
+                    mime_type=request.mime_type,
+                )
+            return (ocr_result or {"raw_text": raw_text or ""}, warnings)
 
         elif workflow_type == WorkflowType.SOAP:
-            return await self._run_ai_workflow("soap", {"raw_text": raw_text}, request_id, request)
+            return await self._run_ai_workflow("soap", {"raw_text": raw_text, "language": request.language, "document_id": request.document_id, "specialty": getattr(request, "specialty", "general")}, request_id, request)
 
         elif workflow_type == WorkflowType.ENTITIES:
-            return await self._run_ai_workflow("entities", {"raw_text": raw_text}, request_id, request)
+            return await self._run_ai_workflow("entities", {"raw_text": raw_text, "language": request.language or "en"}, request_id, request)
 
         elif workflow_type == WorkflowType.NORMALIZATION:
             # Get entities first if available
@@ -298,9 +313,18 @@ class ClinicalAIOrchestrator:
 
             # Parse as generic dict for flexibility
             from app.llm.json_repair import safe_json_loads
-            result = safe_json_loads(response.content)
+            import re
+            raw = response.content
+            # Strip reasoning tags e.g. <think>...</think>
+            raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            # Extract JSON from markdown fences if present
+            fence = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
+            if fence:
+                raw = fence.group(1).strip()
+            result = safe_json_loads(raw)
             if result is None:
-                raise ValueError(f"Failed to parse {capability} output")
+                # Last resort: return raw text as data
+                result = {"raw_text": response.content, "data": raw}
             return result, warnings
 
         except Exception as e:
@@ -365,6 +389,11 @@ class ClinicalAIOrchestrator:
             "terminology_service_available": len(candidates) > 0,
             "warning": warnings[0] if warnings else None,
         }
+        # Store candidates by system key for FHIR to pick up from context
+        if system == "SNOMED_CT":
+            result["snomed_candidates"] = candidates
+        elif system == "ICD11":
+            result["icd_candidates"] = candidates
 
         return result, warnings
 
@@ -378,16 +407,29 @@ class ClinicalAIOrchestrator:
         """Run FHIR resource generation workflow."""
         warnings: List[str] = []
 
-        # Get prerequisite data
-        soap = ctx.get("soap", {})
+        # Get prerequisite data - normalize soap to dict
+        soap_raw = ctx.get("soap", {})
+        if isinstance(soap_raw, str):
+            soap = {}
+        elif isinstance(soap_raw, dict):
+            # soap may be nested under "data" key
+            soap = soap_raw.get("data", soap_raw)
+        else:
+            soap = {}
         entities = ctx.get("entities", [])
+        if isinstance(entities, dict):
+            entities = entities.get("entities", [])
         normalized_terms = ctx.get("normalized_terms", [])
+        if isinstance(normalized_terms, dict):
+            normalized_terms = normalized_terms.get("normalized_terms", [])
 
         # Build variables
         variables = {
             "soap": soap,
             "entities": entities,
             "normalized_terms": normalized_terms,
+            "snomed_candidates": ctx.get("snomed_candidates", []),
+            "icd_candidates": ctx.get("icd_candidates", []),
             "patient_id": request.patient_id,
             "encounter_id": request.encounter_id,
         }

@@ -20,7 +20,70 @@ router = APIRouter()
     response_model=ClinicalResponse,
     status_code=status.HTTP_200_OK,
     summary="ICD-11 Coding",
-    description="Normalize clinical terms and return ICD-11 candidates via terminology gateway.",
+    description=(
+        "Two-step workflow: (1) AI model normalizes clinical terms and abbreviations, "
+        "(2) Normalized terms are sent to the ICD-11 terminology gateway to retrieve code candidates. "
+        "The AI does NOT assign codes — codes come from the external ICD-11 service."
+    ),
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                        "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "image": "data:image/jpeg;base64,/9j/4AAQ...(base64 encoded image)",
+                        "language": "en",
+                    }
+                }
+            }
+        },
+        "responses": {
+            "200": {
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "request_id": "b3c4d5e6f7a2",
+                            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "encounter_id": "550e8400-e29b-41d4-a716-446655440001",
+                            "document_id": "123e4567-e89b-12d3-a456-426614174000",
+                            "workflow": "icd",
+                            "model": {
+                                "repo_id": "Sebukpor/medical-document-understanding-v2-fixed",
+                                "prompt_version": "normalization.v1",
+                                "model_version": "penthus-1.2-alpha-4b",
+                            },
+                            "result": {
+                                "system": "ICD11",
+                                "query_terms": [
+                                    "Refractive error of eye",
+                                    "Presbyopia",
+                                    "Elevated intraocular pressure",
+                                ],
+                                "normalized_terms": [
+                                    {"source_text": "refractive error", "normalized_text": "Refractive error of eye"},
+                                    {"source_text": "presbyopia", "normalized_text": "Presbyopia"},
+                                    {"source_text": "raised IOP", "normalized_text": "Elevated intraocular pressure"},
+                                ],
+                                "candidates": [
+                                    {"term": "Refractive error of eye", "code": "9D00", "system": "ICD11", "score": 0.95},
+                                    {"term": "Presbyopia", "code": "9D01.2", "system": "ICD11", "score": 0.98},
+                                    {"term": "Elevated intraocular pressure", "code": "9C61", "system": "ICD11", "score": 0.88},
+                                ],
+                                "ai_normalized": True,
+                                "terminology_service_available": True,
+                                "warning": None,
+                            },
+                            "warnings": [],
+                            "latency_ms": 15300,
+                            "ocr_reused": True,
+                        }
+                    }
+                }
+            }
+        },
+    },
 )
 async def icd_coding(
     request: ClinicalRequest,
@@ -32,13 +95,14 @@ async def icd_coding(
     """
     ICD-11 coding endpoint.
 
-    1. Resolves OCR if image provided
-    2. Extracts entities if needed
-    3. Normalizes terms via AI model
-    4. Calls terminology gateway for ICD-11 candidates
-    5. Returns normalized terms + ICD-11 candidates
+    Step 1 — AI normalization: The model normalizes clinical abbreviations and
+    terms into canonical forms (e.g. 'SOB' → 'Shortness of breath').
 
-    The AI model normalizes terms but does NOT assign final ICD-11 codes.
+    Step 2 — Terminology gateway: Normalized terms are sent to the ICD-11
+    external service which returns code candidates with confidence scores.
+
+    Note: If the terminology gateway is unavailable, normalized terms are returned
+    without codes and a warning is included in the response.
     """
     settings = get_settings()
     if not settings.features.icd_endpoint:
@@ -49,7 +113,9 @@ async def icd_coding(
             document_id=request.document_id,
             workflow="icd",
             model={"repo_id": "", "prompt_version": "", "model_version": ""},
-            result={"normalized_terms": [], "candidates": [], "system": "ICD11"},
+            result={"normalized_terms": [], "candidates": [], "system": "ICD11",
+                    "query_terms": [], "ai_normalized": False,
+                    "terminology_service_available": False, "warning": None},
             warnings=["ICD-11 coding is disabled"],
             latency_ms=0,
         )

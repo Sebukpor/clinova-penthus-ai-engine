@@ -109,6 +109,17 @@ def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _strip_thinking(text: str) -> str:
+    """Strip <think>...</think> block, return only JSON portion."""
+    import re as _re
+    close = _re.search(r"</think>", text, _re.IGNORECASE)
+    if close:
+        return text[close.end():].strip()
+    if _re.search(r"<think>", text, _re.IGNORECASE):
+        return ""
+    return text
+
+
 def parse_model_output(
     raw_output: str,
     schema_class: Type[T],
@@ -131,6 +142,8 @@ def parse_model_output(
         ModelOutputError: If output cannot be parsed
         JSONRepairError: If repair is attempted but fails
     """
+    # Strip thinking block before parsing
+    raw_output = _strip_thinking(raw_output)
     # Try direct parsing
     parsed = safe_json_loads(raw_output)
 

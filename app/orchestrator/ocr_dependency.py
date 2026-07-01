@@ -18,6 +18,104 @@ from app.prompts.manager import PromptManager
 from app.schemas.ocr import OCRResult as OCRResultSchema
 from app.services.image_preprocessor import get_preprocessor, PreprocessingMetadata
 
+def transform_clinical_to_api_schema(clinical_dict: dict, doc_id: str, lang: str) -> dict:
+    """
+    Transforms the model's clinical JSON output into the standardized API schema.
+    It stringifies the clinical data into 'raw_text' so downstream workflows can still process it.
+    """
+    # 1. Create a highly readable 'raw_text' from the clinical JSON
+    lines = []
+    for section, data in clinical_dict.items():
+        section_lines = []
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if v is not None and v != "" and v is not False:
+                    section_lines.append(f"{k.replace('_', ' ').title()}: {v}")
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    row = " | ".join(f"{k}: {v}" for k, v in item.items() if v is not None and v != "")
+                    if row:
+                        section_lines.append(" - " + row)
+                elif item:
+                    section_lines.append(f" - {item}")
+        else:
+            if data is not None and data != "" and data is not False:
+                section_lines.append(str(data))
+
+        if section_lines:
+            lines.append(f"\n--- {section.upper().replace('_', ' ')} ---")
+            lines.extend(section_lines)
+
+    raw_text = "\n".join(lines)
+
+    # 2. Extract key entities for the 'entities' list
+    entities = []
+    if clinical_dict.get("patient_demographics", {}).get("patient_name"):
+        entities.append({"type": "PATIENT_NAME", "text": clinical_dict["patient_demographics"]["patient_name"], "confidence": 0.95})
+    if clinical_dict.get("doctor_details", {}).get("name_stamp"):
+        entities.append({"type": "DOCTOR_NAME", "text": clinical_dict["doctor_details"]["name_stamp"], "confidence": 0.95})
+
+    # 3. Return the exact structure the Pydantic schema expects
+    return {
+        "document_id": doc_id,
+        "raw_text": raw_text,
+        "entities": entities,
+        "layout": {"pages": 1, "blocks": []},
+        "language": lang,
+        "confidence": 0.95
+    }
+
+import re
+import json
+
+def split_thinking_and_json(raw_text: str):
+    thinking = ""
+    json_part = ""
+    
+    close_tag_match = re.search(r"</think>", raw_text, re.IGNORECASE)
+    if close_tag_match:
+        thinking = raw_text[:close_tag_match.start()].strip()
+        json_part = raw_text[close_tag_match.end():].strip()
+        thinking = re.sub(r"^\s*<think>\s*", "", thinking, flags=re.IGNORECASE).strip()
+    else:
+        open_tag_match = re.search(r"<think>", raw_text, re.IGNORECASE)
+        if open_tag_match:
+            thinking = raw_text[open_tag_match.end():].strip()
+            json_part = ""
+        else:
+            thinking = raw_text.strip()
+            json_part = ""
+            last_brace = thinking.rfind('{')
+            if last_brace != -1:
+                candidate = thinking[last_brace:]
+                depth = 0
+                end_idx = -1
+                for i, char in enumerate(candidate):
+                    if char == '{': depth += 1
+                    elif char == '}':
+                        depth -= 1
+                        if depth == 0:
+                            end_idx = i + 1
+                            break
+                if end_idx != -1:
+                    try:
+                        json.loads(candidate[:end_idx])
+                        json_part = candidate[:end_idx]
+                        thinking = thinking[:last_brace].strip()
+                    except json.JSONDecodeError:
+                        pass
+
+    json_part = re.sub(r"```json\s*", "", json_part, flags=re.IGNORECASE)
+    json_part = re.sub(r"```\s*", "", json_part, flags=re.IGNORECASE).strip()
+    return thinking, json_part
+
+def parse_json_robust(text: str) -> str:
+    if not text:
+        return ""
+    thinking, json_part = split_thinking_and_json(text)
+    return json_part
+
 logger = get_logger(__name__)
 
 
@@ -48,6 +146,12 @@ class OCRDependencyResolver:
         self.settings = get_settings()
         # In-memory deduplication cache for same-content requests during process lifetime
         self._local_cache: dict[str, Dict[str, Any]] = {}
+
+    def _get_ocr_repo(self):
+        if isinstance(self.db, dict):
+            return self.db.get("ocr_results")
+        return getattr(self.db, "ocr_results", None)
+
 
     async def resolve(
         self,
@@ -99,7 +203,7 @@ class OCRDependencyResolver:
 
         # 1. Check PostgreSQL for existing OCR result
         if not force_rerun and self.db:
-            existing = await self.db.ocr_results.get_by_document(tenant_uuid, doc_uuid)
+            existing = await self._get_ocr_repo().get_by_document(tenant_uuid, doc_uuid)
             if existing:
                 logger.info(
                     "ocr_db_hit",
@@ -254,7 +358,7 @@ class OCRDependencyResolver:
         response = await self.vllm.chat_completion(
             messages=messages,
             temperature=prompt_data.get("temperature", 0.0),
-            max_tokens=prompt_data.get("max_tokens", 6048),
+            max_tokens=prompt_data.get("max_tokens", 6096),
             top_p=prompt_data.get("top_p", 0.80),
             top_k=prompt_data.get("top_k", 10),
             presence_penalty=prompt_data.get("presence_penalty", 0.0),
@@ -265,18 +369,25 @@ class OCRDependencyResolver:
 
         # Parse and validate output
         try:
-            ocr_data = parse_model_output(
-                response.content,
-                OCRResultSchema,
-                request_id=request_id,
-            )
+            cleaned_content = parse_json_robust(response.content)
+            if not cleaned_content:
+                cleaned_content = response.content
+            
+            # Parse the model's JSON output
+            parsed_dict = json.loads(cleaned_content)
+            
+            # TRANSFORM: Convert the clinical JSON into the strict API schema
+            transformed_result = transform_clinical_to_api_schema(parsed_dict, document_id, language)
+            
+            # DIRECT PYDANTIC VALIDATION: Bypass json_repair.py entirely!
+            ocr_data = OCRResultSchema.model_validate(transformed_result)
+            
             result = ocr_data.model_dump()
-            # Ensure document_id is set
             result["document_id"] = document_id
             
-            # Add preprocessing metadata if available
             if preprocessing_metadata:
                 result["preprocessing_metadata"] = preprocessing_metadata
+            
             
             return result
         except Exception as e:
@@ -286,6 +397,9 @@ class OCRDependencyResolver:
                 document_id=document_id,
                 request_id=request_id,
             )
+            # DEBUG: Log the first 2000 chars of the raw output to see why parsing failed
+            raw_preview = response.content[:2000] if response and hasattr(response, "content") else "No content"
+            logger.error("ocr_raw_output_debug", raw_preview=raw_preview, request_id=request_id)
             # Return minimal result on parse failure
             return {
                 "document_id": document_id,
@@ -319,7 +433,7 @@ class OCRDependencyResolver:
             except Exception:
                 doc_uuid = document_id
 
-            await self.db.ocr_results.create(
+            await self._get_ocr_repo().create(
                 tenant_id=tenant_uuid,
                 document_id=doc_uuid,
                 raw_text=ocr_result.get("raw_text", ""),
