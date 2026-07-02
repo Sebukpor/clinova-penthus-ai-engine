@@ -17,6 +17,7 @@ node_modules/
 
 # Environment
 .env
+.envrc
 .env.local
 *.env.*
 
