@@ -55,7 +55,6 @@ router = APIRouter()
                                 "translated_text": "Le patient s'est présenté pour un examen ophtalmologique de routine. Acuité visuelle : OD 6/12P, OG 6/12P. Pression intraoculaire : OD 21,0 mmHg, OG 23,0 mmHg. Presbytie confirmée (+2,50 add). Prescription : gouttes E19 combination BCS 00, 6 fois par jour, 1 mois.",
                                 "source_language": "en",
                                 "target_language": "fr",
-                                "confidence": 0.93,
                             },
                             "warnings": [],
                             "latency_ms": 18900,
@@ -84,7 +83,7 @@ async def translation(
             document_id=request.document_id,
             workflow="translation",
             model={"repo_id": "", "prompt_version": "", "model_version": ""},
-            result={"translated_text": "", "source_language": request.language, "target_language": request.target_language or "en", "confidence": 0.0},
+            result={"translated_text": "", "source_language": request.language, "target_language": request.target_language or "en"},
             warnings=["Translation feature is disabled"],
             latency_ms=0,
         )

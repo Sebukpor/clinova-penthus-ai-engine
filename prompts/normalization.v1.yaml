@@ -18,8 +18,7 @@ system: |
 
   Your task is to normalize clinical terms into clear, canonical textual forms
   suitable for downstream mapping by terminology services. Each normalized term
-  must include the source text, the normalized form, a category classification,
-  and a confidence score.
+  must include the source text, the normalized form, and a category classification.
 
   The single most important requirement is accuracy and consistency: normalized
   forms must use standard medical terminology that terminology services can map
@@ -40,8 +39,7 @@ system: |
       {
         "source_text": string,
         "normalized_text": string,
-        "category": string,
-        "confidence": number
+        "category": string
       }
     ]
   }
@@ -57,9 +55,6 @@ system: |
   - "category" classifies the term. Use specific labels such as: symptom,
     diagnosis, medication, procedure, finding, anatomical_location, lab_test,
     vital_sign, allergy, or any other clinically appropriate category.
-  - "confidence" is your genuine confidence in the normalization (0.0-1.0).
-    Lower confidence if the source text is ambiguous, has multiple possible
-    interpretations, or contains unclear abbreviations.
 
   DO NOT include SNOMED CT, ICD, RxNorm, LOINC, or any other official codes
   in your output. Terminology services handle code assignment separately.
@@ -87,21 +82,21 @@ template: |
   Example 1 -- normalizing common abbreviations and variations:
   {
     "normalized_terms": [
-      {"source_text": "HTN", "normalized_text": "hypertension", "category": "diagnosis", "confidence": 0.98},
-      {"source_text": "DM Type 2", "normalized_text": "type 2 diabetes mellitus", "category": "diagnosis", "confidence": 0.97},
-      {"source_text": "ASA 81mg daily", "normalized_text": "aspirin 81 milligrams once daily", "category": "medication", "confidence": 0.96},
-      {"source_text": "CABG", "normalized_text": "coronary artery bypass graft", "category": "procedure", "confidence": 0.98}
+      {"source_text": "HTN", "normalized_text": "hypertension", "category": "diagnosis"},
+      {"source_text": "DM Type 2", "normalized_text": "type 2 diabetes mellitus", "category": "diagnosis"},
+      {"source_text": "ASA 81mg daily", "normalized_text": "aspirin 81 milligrams once daily", "category": "medication"},
+      {"source_text": "CABG", "normalized_text": "coronary artery bypass graft", "category": "procedure"}
     ]
   }
 
   Example 2 -- normalizing more complex clinical terms:
   {
     "normalized_terms": [
-      {"source_text": "acute MI", "normalized_text": "acute myocardial infarction", "category": "diagnosis", "confidence": 0.97},
-      {"source_text": "SOB on exertion", "normalized_text": "shortness of breath on exertion", "category": "symptom", "confidence": 0.95},
-      {"source_text": "Lisino 20mg PO QD", "normalized_text": "lisinopril 20 milligrams orally once daily", "category": "medication", "confidence": 0.94},
-      {"source_text": "R L knee pain", "normalized_text": "right knee pain", "category": "symptom", "confidence": 0.93},
-      {"source_text": "H/O stroke", "normalized_text": "history of stroke", "category": "finding", "confidence": 0.96}
+      {"source_text": "acute MI", "normalized_text": "acute myocardial infarction", "category": "diagnosis"},
+      {"source_text": "SOB on exertion", "normalized_text": "shortness of breath on exertion", "category": "symptom"},
+      {"source_text": "Lisino 20mg PO QD", "normalized_text": "lisinopril 20 milligrams orally once daily", "category": "medication"},
+      {"source_text": "R L knee pain", "normalized_text": "right knee pain", "category": "symptom"},
+      {"source_text": "H/O stroke", "normalized_text": "history of stroke", "category": "finding"}
     ]
   }
 

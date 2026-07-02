@@ -55,13 +55,10 @@ router = APIRouter()
                                     {
                                         "type": "DOCTOR_NAME",
                                         "text": "DR. SANA ZAFAR, ASSISTANT PROFESSOR, DEPT OF OPHTHALMOLOGY",
-                                        "confidence": 0.95,
-                                        "bbox": None,
                                     }
                                 ],
                                 "layout": {"pages": 1, "blocks": []},
                                 "language": "en",
-                                "confidence": 0.95,
                             },
                             "warnings": [],
                             "latency_ms": 34200,

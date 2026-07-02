@@ -68,7 +68,7 @@ class TestWorkflowExecution:
     async def test_entities_resolves_ocr_first(self, mock_orchestrator):
         """Entities endpoint resolves OCR before entity extraction."""
         orchestrator, vllm, prompts, ocr = mock_orchestrator
-        vllm.chat_completion.return_value.content = '{"entities": [{"text": "fever", "type": "symptom", "confidence": 0.97}]}'
+        vllm.chat_completion.return_value.content = '{"entities": [{"text": "fever", "type": "symptom"}]}'
 
         from app.schemas.requests import ClinicalRequest
         request = ClinicalRequest(
@@ -89,7 +89,7 @@ class TestWorkflowExecution:
         """SNOMED endpoint resolves OCR, entities, normalization, then calls terminology."""
         orchestrator, vllm, prompts, ocr = mock_orchestrator
 
-        vllm.chat_completion.return_value.content = '{"normalized_terms": [{"source_text": "HTN", "normalized_text": "hypertension", "category": "diagnosis", "confidence": 0.95}]}'
+        vllm.chat_completion.return_value.content = '{"normalized_terms": [{"source_text": "HTN", "normalized_text": "hypertension", "category": "diagnosis"}]}'
 
         # Add terminology client
         terminology = AsyncMock()
@@ -122,7 +122,7 @@ class TestWorkflowExecution:
             {"raw_text": "Patient has hypertension.", "entities": [{"text": "hypertension", "type": "diagnosis"}]},
             True,
         )
-        vllm.chat_completion.return_value.content = '{"normalized_terms": [{"source_text": "HTN", "normalized_text": "hypertension", "category": "diagnosis", "confidence": 0.95}]}'
+        vllm.chat_completion.return_value.content = '{"normalized_terms": [{"source_text": "HTN", "normalized_text": "hypertension", "category": "diagnosis"}]}'
 
         terminology = AsyncMock()
         terminology.search_icd.return_value = [

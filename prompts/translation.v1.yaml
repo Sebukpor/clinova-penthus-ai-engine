@@ -39,8 +39,7 @@ system: |
   {
     "source_language": string,
     "target_language": string,
-    "translated_text": string,
-    "confidence": number
+    "translated_text": string
   }
 
   Field rules:
@@ -54,9 +53,6 @@ system: |
     language. For common abbreviations that may not be universally understood,
     include the original abbreviation parenthetically (e.g., "hipertensión arterial
     (HTA)"). Maintain the original tone and urgency level.
-  - "confidence" is your genuine confidence in the translation (0.0-1.0). Lower
-    confidence if the source contains unclear handwriting artifacts, ambiguous
-    terms, mixed languages, or highly specialized jargon.
 
   Output the JSON object and nothing else: no markdown fences, no leading
   or trailing prose, no explanation before or after the JSON.
@@ -80,16 +76,14 @@ template: |
   {
     "source_language": "es",
     "target_language": "en",
-    "translated_text": "Patient is a 52-year-old male with history of hypertension and type 2 diabetes. Presents with 2-day history of fever (39°C) and productive cough with yellowish sputum. Vital signs: BP 135/85 mmHg, HR 98 bpm, SpO2 94% on room air. Chest X-ray shows right lower lobe infiltrate. Assessment: Community-acquired pneumonia. Plan: Ceftriaxone 1g IV daily, Azithromycin 500mg orally once daily, oxygen 2L/min via nasal cannula.",
-    "confidence": 0.96
+    "translated_text": "Patient is a 52-year-old male with history of hypertension and type 2 diabetes. Presents with 2-day history of fever (39°C) and productive cough with yellowish sputum. Vital signs: BP 135/85 mmHg, HR 98 bpm, SpO2 94% on room air. Chest X-ray shows right lower lobe infiltrate. Assessment: Community-acquired pneumonia. Plan: Ceftriaxone 1g IV daily, Azithromycin 500mg orally once daily, oxygen 2L/min via nasal cannula."
   }
 
   Example 2 -- English to French translation:
   {
     "source_language": "en",
     "target_language": "fr",
-    "translated_text": "Patiente de 68 ans avec antécédents de fibrillation auriculaire sous anticoagulation (Warfarine 5mg/jour). Présente des douleurs abdominales sévères et des vomissements sanglants depuis 6 heures. Signes vitaux: TA 95/60 mmHg, FC 110 bpm, Hb 7.2 g/dL (normale 12-16). Évaluation: hémorragie digestive supérieure suspectée. Plan: transfusion de 2 unités de concentrés globulaires, endoscopie digestive haute en urgence, inhibiteur de la pompe à protons IV.",
-    "confidence": 0.94
+    "translated_text": "Patiente de 68 ans avec antécédents de fibrillation auriculaire sous anticoagulation (Warfarine 5mg/jour). Présente des douleurs abdominales sévères et des vomissements sanglants depuis 6 heures. Signes vitaux: TA 95/60 mmHg, FC 110 bpm, Hb 7.2 g/dL (normale 12-16). Évaluation: hémorragie digestive supérieure suspectée. Plan: transfusion de 2 unités de concentrés globulaires, endoscopie digestive haute en urgence, inhibiteur de la pompe à protons IV."
   }
 
   Notice how both examples preserve all numerical values, medication dosages,
