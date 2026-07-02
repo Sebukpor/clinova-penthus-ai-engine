@@ -52,9 +52,9 @@ def transform_clinical_to_api_schema(clinical_dict: dict, doc_id: str, lang: str
     # 2. Extract key entities for the 'entities' list
     entities = []
     if clinical_dict.get("patient_demographics", {}).get("patient_name"):
-        entities.append({"type": "PATIENT_NAME", "text": clinical_dict["patient_demographics"]["patient_name"], "confidence": 0.95})
+        entities.append({"type": "PATIENT_NAME", "text": clinical_dict["patient_demographics"]["patient_name"]})
     if clinical_dict.get("doctor_details", {}).get("name_stamp"):
-        entities.append({"type": "DOCTOR_NAME", "text": clinical_dict["doctor_details"]["name_stamp"], "confidence": 0.95})
+        entities.append({"type": "DOCTOR_NAME", "text": clinical_dict["doctor_details"]["name_stamp"]})
 
     # 3. Return the exact structure the Pydantic schema expects
     return {
@@ -63,7 +63,6 @@ def transform_clinical_to_api_schema(clinical_dict: dict, doc_id: str, lang: str
         "entities": entities,
         "layout": {"pages": 1, "blocks": []},
         "language": lang,
-        "confidence": 0.95
     }
 
 import re
@@ -407,7 +406,6 @@ class OCRDependencyResolver:
                 "entities": [],
                 "layout": {"pages": 1, "blocks": []},
                 "language": language,
-                "confidence": 0.0,
                 "_parse_error": str(e),
                 "preprocessing_metadata": preprocessing_metadata,
             }
@@ -440,7 +438,6 @@ class OCRDependencyResolver:
                 entities=ocr_result.get("entities", []),
                 layout=ocr_result.get("layout", {}),
                 language=ocr_result.get("language", "en"),
-                confidence=ocr_result.get("confidence"),
                 model_version="penthus-1.2-alpha-4b",
                 prompt_version="ocr.v1",
             )
@@ -467,5 +464,4 @@ class OCRDependencyResolver:
             "entities": db_result.entities,
             "layout": db_result.layout,
             "language": db_result.language,
-            "confidence": float(db_result.confidence) if db_result.confidence else None,
         }
