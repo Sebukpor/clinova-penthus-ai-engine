@@ -17,6 +17,17 @@ logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def strip_thinking_tags(raw_output: str) -> str:
+    """Removes <think>...</think> blocks and any preamble before the JSON."""
+    # Remove <think> ... </think> blocks entirely
+    cleaned = re.sub(r'[\s\S]*?</think>', '', raw_output, flags=re.IGNORECASE)
+    # Find the first '{' and slice from there
+    start_idx = cleaned.find('{')
+    if start_idx != -1:
+        return cleaned[start_idx:]
+    return cleaned
+
+
 def extract_json_from_markdown(text: str) -> Optional[str]:
     """Extract JSON from markdown code blocks."""
     # Try fenced code block
@@ -75,7 +86,12 @@ def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
     if not text or not text.strip():
         return None
 
+    # First, strip thinking tags aggressively
+    text = strip_thinking_tags(text)
     text = text.strip()
+    
+    if not text:
+        return None
 
     # Strategy 1: Direct parse
     try:
