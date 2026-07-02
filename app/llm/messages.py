@@ -118,7 +118,7 @@ class PenthusSystemPrompts:
     ENTITIES = (
         "You are Penthus, the Clinova clinical entity extraction model. "
         "Identify and extract all clinical entities from the provided text. "
-        "Classify each entity by type and provide confidence scores. "
+        "Classify each entity by type. "
         "Return only valid JSON."
     )
 

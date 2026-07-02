@@ -51,11 +51,11 @@ router = APIRouter()
                             },
                             "result": {
                                 "entities": [
-                                    {"type": "CONDITION", "text": "refractive error", "confidence": 0.92, "start": 0, "end": 16},
-                                    {"type": "CONDITION", "text": "presbyopia", "confidence": 0.95, "start": 18, "end": 28},
-                                    {"type": "MEDICATION", "text": "E19 combination BCS 00", "confidence": 0.90, "start": 30, "end": 52},
-                                    {"type": "MEASUREMENT", "text": "IOP 21.0 mmHg", "confidence": 0.97, "start": 54, "end": 67},
-                                    {"type": "DOCTOR", "text": "DR. SANA ZAFAR", "confidence": 0.98, "start": 70, "end": 84},
+                                    {"type": "CONDITION", "text": "refractive error", "start": 0, "end": 16},
+                                    {"type": "CONDITION", "text": "presbyopia", "start": 18, "end": 28},
+                                    {"type": "MEDICATION", "text": "E19 combination BCS 00", "start": 30, "end": 52},
+                                    {"type": "MEASUREMENT", "text": "IOP 21.0 mmHg", "start": 54, "end": 67},
+                                    {"type": "DOCTOR", "text": "DR. SANA ZAFAR", "start": 70, "end": 84},
                                 ]
                             },
                             "warnings": [],
