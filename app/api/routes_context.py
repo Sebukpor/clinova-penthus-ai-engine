@@ -96,7 +96,6 @@ async def get_document_ocr(
         "raw_text": result.raw_text,
         "entities": result.entities,
         "language": result.language,
-        "confidence": float(result.confidence) if result.confidence else None,
         "model_version": result.model_version,
         "prompt_version": result.prompt_version,
         "created_at": result.created_at.isoformat() if result.created_at else None,

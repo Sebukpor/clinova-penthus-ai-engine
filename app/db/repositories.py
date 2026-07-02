@@ -74,7 +74,7 @@ class OCRResultRepository(BaseRepository):
 
     async def create(self, tenant_id: uuid.UUID, document_id: uuid.UUID,
                      raw_text: str, model_version: str, prompt_version: str,
-                     language: str = "en", confidence: Optional[float] = None,
+                     language: str = "en",
                      entities: Optional[List[Dict]] = None,
                      layout: Optional[Dict] = None,
                      processing_time_ms: Optional[int] = None) -> OCRResult:
@@ -83,7 +83,6 @@ class OCRResultRepository(BaseRepository):
             document_id=document_id,
             raw_text=raw_text,
             language=language,
-            confidence=confidence,
             entities=entities or [],
             layout=layout or {},
             model_version=model_version,
