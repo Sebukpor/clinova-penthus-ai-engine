@@ -138,7 +138,6 @@ class OCRResult(Base):
     entities: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, default=list)
     layout: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
-    confidence: Mapped[Optional[float]] = mapped_column(Numeric(5, 4), nullable=True)
     model_version: Mapped[str] = mapped_column(String(100), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(50), nullable=False)
     processing_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
