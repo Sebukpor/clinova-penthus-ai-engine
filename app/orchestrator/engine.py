@@ -358,7 +358,10 @@ class ClinicalAIOrchestrator:
             normalized_terms = norm_result.get("normalized_terms", [])
 
         # Step 2: Call terminology gateway
-        terms = [t.get("normalized_text", t.get("source_text", "")) for t in normalized_terms if t]
+        terms = [
+            t.get("normalized_text", t.get("source_text", t)) if isinstance(t, dict) else str(t) 
+            for t in normalized_terms if t
+        ]
 
         candidates = []
         if self.terminology and terms:

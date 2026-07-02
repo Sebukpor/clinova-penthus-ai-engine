@@ -11,6 +11,8 @@ from app.core.config import get_settings
 from app.core.errors import OCRDependencyError
 from app.core.logging import get_logger
 from app.core.observability import record_ocr_cache_hit
+from app.db.models import Document
+from app.db.repositories import DocumentRepository
 from app.llm.json_repair import parse_model_output
 from app.llm.messages import build_messages
 from app.llm.vllm_client import VLLMClient
@@ -431,6 +433,25 @@ class OCRDependencyResolver:
             except Exception:
                 doc_uuid = document_id
 
+            # Defensive check: ensure Document exists before saving OCR result
+            # Auto-create stub document to prevent FK violation
+            doc_repo = self._get_doc_repo()
+            if doc_repo:
+                doc = await doc_repo.get_by_id(tenant_uuid, doc_uuid)
+                if not doc:
+                    # Auto-create stub document to prevent FK violation
+                    doc = Document(
+                        id=doc_uuid,
+                        tenant_id=tenant_uuid,
+                        encounter_id=uuid.UUID(ocr_result.get("encounter_id", document_id)) if isinstance(ocr_result.get("encounter_id"), str) else ocr_result.get("encounter_id", doc_uuid),
+                        content_hash="auto_stub",
+                        mime_type="image/jpeg",
+                        storage_uri="auto_stub",
+                    )
+                    if hasattr(doc_repo.session, 'add'):
+                        doc_repo.session.add(doc)
+                        await doc_repo.session.flush()
+
             await self._get_ocr_repo().create(
                 tenant_id=tenant_uuid,
                 document_id=doc_uuid,
@@ -445,6 +466,12 @@ class OCRDependencyResolver:
         except Exception as e:
             logger.error("ocr_persist_failed", document_id=document_id, error=str(e))
             # Don't raise - OCR result is still usable
+
+    def _get_doc_repo(self):
+        """Get the document repository from db."""
+        if isinstance(self.db, dict):
+            return self.db.get("documents")
+        return getattr(self.db, "documents", None)
 
     def _cache_key(self, tenant_id: str, content_hash: str) -> str:
         """Generate Redis cache key for OCR result."""
