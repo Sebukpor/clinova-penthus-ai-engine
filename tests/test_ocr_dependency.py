@@ -17,10 +17,9 @@ def mock_vllm():
     client.chat_completion.return_value.content = '''{
         "document_id": "doc_001",
         "raw_text": "Patient has fever for 3 days.",
-        "entities": [{"text": "fever", "type": "symptom", "confidence": 0.97}],
+        "entities": [{"text": "fever", "type": "symptom"}],
         "layout": {"pages": 1, "blocks": []},
-        "language": "en",
-        "confidence": 0.96
+        "language": "en"
     }'''
     client.chat_completion.return_value.model = "penthus-1.2-alpha-4b"
     return client
@@ -84,7 +83,6 @@ class TestOCRDependency:
 
         assert not reused
         assert result["raw_text"] == "Patient has fever for 3 days."
-        assert result["confidence"] == 0.96
         mock_vllm.chat_completion.assert_called_once()
 
     @pytest.mark.asyncio
@@ -96,7 +94,6 @@ class TestOCRDependency:
         db_result.entities = []
         db_result.layout = {}
         db_result.language = "en"
-        db_result.confidence = 0.99
 
         mock_db.ocr_results.get_by_document.return_value = db_result
 
@@ -122,7 +119,6 @@ class TestOCRDependency:
             "entities": [],
             "layout": {},
             "language": "en",
-            "confidence": 0.98,
         }
 
         result, reused = await resolver.resolve(
@@ -144,7 +140,6 @@ class TestOCRDependency:
         db_result.document_id = uuid.UUID("12345678-1234-1234-1234-123456789abc")
         db_result.raw_text = "Cached text"
         db_result.entities = []
-        db_result.confidence = 0.99
 
         mock_db.ocr_results.get_by_document.return_value = db_result
 

@@ -83,7 +83,7 @@ class TestClinicalContextStore:
             tenant_id="tenant_001",
             encounter_id="enc_001",
             workflow="ocr",
-            result={"raw_text": "Test text", "confidence": 0.95},
+            result={"raw_text": "Test text"},
         )
 
         db.clinical_contexts.create_or_update.assert_called_once()
