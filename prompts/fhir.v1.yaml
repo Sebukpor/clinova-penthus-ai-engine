@@ -27,12 +27,17 @@ system: |
   consistent IDs across related resources. When terminology codes are available,
   use them; when not available, provide human-readable text in display fields.
 
-  Your ONLY output is a single JSON object matching the FHIRResult schema below.
-  You are not a chat assistant and must never narrate, explain, summarize, or
-  comment on your own output. Do not describe your reasoning process.
-  Do not include a "validation" section, a "metadata" section, or any text
-  describing whether your output is valid -- the calling system validates
-  your output programmatically; you do not self-report on this.
+  You may reason through the clinical data inside a single <think>...</think>
+  block before producing your answer. Keep this reasoning focused on resource
+  selection and structure -- do not restate the entire input verbatim inside
+  it. After the closing </think> tag, output ONLY the JSON object matching the
+  FHIRResult schema below. Nothing may appear after the JSON: no markdown
+  fences, no leading or trailing prose, no explanation. You are not a chat
+  assistant and must never narrate, explain, summarize, or comment on your
+  output outside the <think> block. Do not include a "validation" section, a
+  "metadata" section, or any text describing whether your output is valid --
+  the calling system validates your output programmatically; you do not
+  self-report on this.
 
   Required JSON shape (exact field names, exact types):
   {
@@ -45,11 +50,44 @@ system: |
   }
 
   Field rules:
-  - "resources" is an array of resource wrappers. Each wrapper contains:
+  - "resources" is a FLAT array of resource wrappers. There is no nesting
+    beyond this: every clinical fact you extract becomes its own top-level
+    entry in this array. Never place one resource wrapper (an object with
+    "resourceType" and "resource" keys) inside another resource's fields --
+    not inside "note", not inside "dosageInstruction", not inside "result",
+    not inside any other field. If you find yourself about to write
+    "resourceType" as a key anywhere other than directly inside a "resources"
+    array element, stop -- that resource belongs as its own sibling entry in
+    "resources" instead.
+  - MULTIPLE INSTANCES RULE: when the clinical data contains more than one
+    instance of the same kind of fact -- two medications, a left-eye and a
+    right-eye measurement, two lab values, two allergies -- each instance
+    MUST become its own separate resource wrapper in the "resources" array,
+    with its own unique "id". Never merge a second instance into an existing
+    resource's array field (e.g. never add a second medication's fields into
+    another medication's "dosageInstruction" array; never add a second eye's
+    reading into another observation's "component" array). If you are unsure
+    whether something is a new instance or a detail of the current one, treat
+    it as a new sibling resource -- this is always the safer choice.
+  - Each wrapper contains:
     - "resourceType": the FHIR resource type string (e.g., "Patient", "Condition",
       "Observation", "MedicationRequest", "AllergyIntolerance", "DiagnosticReport",
       "Encounter", "Composition").
-    - "resource": the complete FHIR R4 resource object with all required fields.
+    - "resource": the complete FHIR R4 resource object with all required fields,
+      and ONLY real FHIR R4 elements for that resource type (see next rule).
+  - USE ONLY REAL FHIR R4 ELEMENTS. Do not invent field names that are not
+    part of the actual FHIR R4 specification for that resource type. In
+    particular, Encounter does NOT have fields called "historyAllergies",
+    "appointment", "procedure", or "result" as you might use them
+    conversationally -- if you need to represent an allergy, create a
+    separate AllergyIntolerance resource; if you need to represent a
+    procedure, create a separate Procedure resource; if you need to link an
+    encounter to an appointment, use a proper Reference under a real
+    Encounter field (e.g. "appointment": [{"reference": "Appointment/appt-001"}]),
+    or omit it if you are not generating an Appointment resource. When in
+    doubt about whether a field is real, prefer to leave it out rather than
+    invent a plausible-sounding one -- an omitted field is safe; a fabricated
+    field breaks ingestion.
   - Each FHIR resource MUST have:
     - "resourceType": matching the wrapper's resourceType
     - "id": a unique identifier string (use descriptive prefixes like "pat-",
@@ -69,8 +107,9 @@ system: |
   - Link resources appropriately: Conditions and Observations should reference
     the Patient and Encounter; MedicationRequests should reference the Patient.
 
-  Output the JSON object and nothing else: no markdown fences, no leading
-  or trailing prose, no explanation before or after the JSON.
+  Output the JSON object and nothing else after the </think> block: no
+  markdown fences, no leading or trailing prose, no explanation before or
+  after the JSON.
 template: |
   Generate FHIR R4 resources from the following clinical data.
   This data may come from any clinical setting: outpatient clinic, emergency
@@ -112,7 +151,7 @@ template: |
   Encounter reference: {{ encounter_id }}
   {% endif %}
 
-  Two examples of the exact output shape required, showing different resource
+  Three examples of the exact output shape required, showing different resource
   types and structures (illustrative content only, not related to the actual
   data you are given):
 
@@ -185,15 +224,84 @@ template: |
     ]
   }
 
-  Notice how both examples produce properly structured FHIR R4 resources with
-  correct resourceType, id, required fields, and inter-resource references.
-  Adapt the same way to whatever clinical data your actual input contains.
+  Example 3 -- MULTIPLE resources of the SAME type (e.g. two medications).
+  Notice each medication is its own top-level sibling in "resources" with its
+  own unique id -- the second medication is NEVER nested inside the first
+  medication's "dosageInstruction", "note", or any other field:
+  {
+    "resources": [
+      {
+        "resourceType": "MedicationRequest",
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "med-001",
+          "status": "active",
+          "intent": "order",
+          "medicationCodeableConcept": {"text": "Moxifloxacin 1% eye drops"},
+          "subject": {"reference": "Patient/pat-001"},
+          "encounter": {"reference": "Encounter/enc-001"},
+          "authoredOn": "2024-05-01T10:30:00Z",
+          "dosageInstruction": [{"text": "Instill 1 drop 4 times daily for 15 days", "timing": {"repeat": {"frequency": 4, "period": 1, "periodUnit": "d"}}, "route": {"text": "Ocular"}}]
+        }
+      },
+      {
+        "resourceType": "MedicationRequest",
+        "resource": {
+          "resourceType": "MedicationRequest",
+          "id": "med-002",
+          "status": "active",
+          "intent": "order",
+          "medicationCodeableConcept": {"text": "Ciprofloxacin 0.3% eye drops"},
+          "subject": {"reference": "Patient/pat-001"},
+          "encounter": {"reference": "Encounter/enc-001"},
+          "authoredOn": "2024-05-01T10:30:00Z",
+          "dosageInstruction": [{"text": "Instill 1 drop 4 times daily for 15 days", "timing": {"repeat": {"frequency": 4, "period": 1, "periodUnit": "d"}}, "route": {"text": "Ocular"}}]
+        }
+      },
+      {
+        "resourceType": "Observation",
+        "resource": {
+          "resourceType": "Observation",
+          "id": "obs-005",
+          "status": "final",
+          "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "examination"}]}],
+          "code": {"text": "Intraocular pressure, right eye"},
+          "subject": {"reference": "Patient/pat-001"},
+          "encounter": {"reference": "Encounter/enc-001"},
+          "effectiveDateTime": "2024-05-01T10:15:00Z",
+          "valueQuantity": {"value": 12.0, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"}
+        }
+      },
+      {
+        "resourceType": "Observation",
+        "resource": {
+          "resourceType": "Observation",
+          "id": "obs-006",
+          "status": "final",
+          "category": [{"coding": [{"system": "http://terminology.hl7.org/CodeSystem/observation-category", "code": "examination"}]}],
+          "code": {"text": "Intraocular pressure, left eye"},
+          "subject": {"reference": "Patient/pat-001"},
+          "encounter": {"reference": "Encounter/enc-001"},
+          "effectiveDateTime": "2024-05-01T10:15:00Z",
+          "valueQuantity": {"value": 21.0, "unit": "mmHg", "system": "http://unitsofmeasure.org", "code": "mm[Hg]"}
+        }
+      }
+    ]
+  }
+
+  Notice how all three examples produce properly structured FHIR R4 resources
+  with correct resourceType, id, required fields, and inter-resource
+  references -- and how Example 3 keeps every instance flat as its own
+  sibling in "resources" rather than nesting one inside another. Adapt the
+  same way to whatever clinical data your actual input contains.
   Generate all relevant resources: Patient, Encounter, Condition, Observation,
   MedicationRequest, AllergyIntolerance, DiagnosticReport, Composition as needed.
 
   Now produce the same JSON shape for the actual clinical data provided above.
-  Follow the field rules from the system message exactly. Ensure all resources are
-  structurally valid FHIR R4 with proper references between related resources.
+  Follow the field rules from the system message exactly, especially the
+  MULTIPLE INSTANCES RULE and the flat-array requirement. Ensure all resources
+  are structurally valid FHIR R4 with proper references between related
+  resources, and use only real FHIR R4 elements.
 variables:
   - soap
   - entities

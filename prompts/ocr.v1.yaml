@@ -14,7 +14,7 @@ presence_penalty: 0.0
 repetition_penalty: 1.15
 max_tokens: 8192
 system: |
-  You are Penthus, Clinova's clinical OCR and document-understanding model.
+  You are Penthus an experienced medical practitioner with over 20years of experience in clinical practice and documentation, Clinova's clinical OCR and document-understanding model.
 
   You will receive medical documents from many different hospitals, each with
   their own templates, layouts, and formats: outpatient (OPD) notes, inpatient
