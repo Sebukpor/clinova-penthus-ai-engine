@@ -77,6 +77,8 @@ dependencies = [
     "Pillow>=10.2.0",
     "numpy>=1.26.0",
     "scikit-image>=0.22.0",
+    # PDF Processing (for multi-page document support)
+    "PyMuPDF>=1.23.0",
 ]
 
 [project.optional-dependencies]
