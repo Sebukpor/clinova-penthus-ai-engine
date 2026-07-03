@@ -3,7 +3,7 @@ Clinova Penthus AI Engine - Request Schemas
 Standardized request envelope for all clinical AI workflows.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,23 +19,53 @@ class RequestMetadata(BaseModel):
 
 
 class ClinicalRequest(BaseModel):
-    """Standard request envelope for all clinical AI endpoints."""
+    """Standard request envelope for all clinical AI endpoints.
+    
+    Supports multiple input types:
+    - Single image (backward compatible)
+    - PDF documents (multi-page)
+    - TXT files
+    - Multiple documents in one request
+    """
     tenant_id: str = Field(..., description="Tenant ID for multi-tenant isolation")
     encounter_id: str = Field(..., description="Clinical encounter identifier")
     document_id: Optional[str] = Field(default=None, description="Document identifier")
     patient_id: Optional[str] = Field(default=None, description="Patient reference ID")
+    
+    # EXISTING FIELDS - KEEP FOR BACKWARD COMPATIBILITY
     image: Optional[str] = Field(
         default=None,
-        description="Base64-encoded image or object storage URI"
+        description="Base64-encoded image or object storage URI (single image workflow)"
     )
     mime_type: Optional[str] = Field(
         default=None,
         description="MIME type of the image (e.g., 'image/png', 'image/jpeg')"
     )
+    
+    # NEW OPTIONAL FIELDS FOR MULTI-DOCUMENT SUPPORT
+    file: Optional[str] = Field(
+        default=None,
+        description="Base64-encoded file (PDF, TXT, or image) with data URI prefix"
+    )
+    file_type: Optional[str] = Field(
+        default=None,
+        description="MIME type of the file (e.g., 'application/pdf', 'text/plain')"
+    )
+    files: Optional[List[str]] = Field(
+        default=None,
+        description="List of base64-encoded files for multi-document processing"
+    )
+    file_types: Optional[List[str]] = Field(
+        default=None,
+        description="List of MIME types corresponding to files"
+    )
+    
+    # DIRECT TEXT INPUT (bypasses OCR)
     text: Optional[str] = Field(
         default=None,
-        description="Plain text input (alternative to image)"
+        description="Plain text input (alternative to image/file)"
     )
+    
     language: str = Field(default="en", description="ISO 639-1 language code")
     target_language: Optional[str] = Field(
         default=None,
@@ -62,6 +92,25 @@ class ClinicalRequest(BaseModel):
             # Validate base64 data URI format
             if ";base64," not in v:
                 raise ValueError("Invalid base64 data URI format")
+        return v
+
+    @field_validator("file")
+    @classmethod
+    def validate_file_format(cls, v: Optional[str]) -> Optional[str]:
+        if v and v.startswith("data:"):
+            # Validate base64 data URI format
+            if ";base64," not in v:
+                raise ValueError("Invalid base64 data URI format for file")
+        return v
+
+    @field_validator("files")
+    @classmethod
+    def validate_files_format(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v:
+            for i, file in enumerate(v):
+                if file and file.startswith("data:"):
+                    if ";base64," not in file:
+                        raise ValueError(f"Invalid base64 data URI format for files[{i}]")
         return v
 
     @field_validator("text")
