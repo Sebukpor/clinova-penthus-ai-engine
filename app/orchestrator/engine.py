@@ -2,7 +2,7 @@
 Clinova Penthus AI Engine - Clinical AI Orchestrator
 Main orchestration engine for all clinical AI workflows.
 """
-
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -14,9 +14,11 @@ from app.core.observability import (
     async_workflow_span,
     record_inference_log,
     record_tenant_request,
+    record_validation_failure,
     record_workflow_error,
 )
-from app.llm.json_repair import parse_model_output
+# Import the robust JSON repair functions
+from app.llm.json_repair import parse_model_output, safe_json_loads, strip_thinking_tags
 from app.llm.messages import build_messages
 from app.llm.vllm_client import VLLMClient
 from app.orchestrator.ocr_dependency import OCRDependencyResolver
@@ -31,18 +33,6 @@ logger = get_logger(__name__)
 class ClinicalAIOrchestrator:
     """
     Main Clinical AI Orchestrator.
-
-    Coordinates all clinical AI workflows through a single vLLM model:
-    - OCR (shared foundational layer)
-    - SOAP generation
-    - Entity extraction
-    - Term normalization
-    - Summary generation
-    - Gap detection
-    - Translation
-    - SNOMED CT mapping (via terminology client)
-    - ICD-11 coding (via terminology client)
-    - FHIR resource generation
     """
 
     def __init__(
@@ -72,20 +62,8 @@ class ClinicalAIOrchestrator:
         request: ClinicalRequest,
         request_id: str,
     ) -> ClinicalResponse:
-        """
-        Execute a clinical AI workflow.
-
-        Args:
-            workflow: Workflow type (ocr, soap, entities, etc.)
-            request: Clinical request envelope
-            request_id: Unique request identifier
-
-        Returns:
-            ClinicalResponse with results
-        """
         start_time = time.time()
 
-        # Validate workflow
         if workflow not in WorkflowType.all():
             raise UnsupportedWorkflowError(workflow, request_id=request_id)
 
@@ -115,6 +93,7 @@ class ClinicalAIOrchestrator:
             logger.info("DEBUG_OCR_CHECK", requires_ocr=config.requires_ocr, has_image=bool(request.image), image_len=len(request.image) if request.image else 0)
             if config.requires_ocr and request.image:
                 content_hash = await self._get_or_compute_hash(request)
+                # FIX: Removed 'specialty' argument to match OCRDependencyResolver.resolve() signature
                 ocr_result, ocr_reused = await self.ocr.resolve(
                     tenant_id=request.tenant_id,
                     encounter_id=request.encounter_id,
@@ -202,6 +181,7 @@ class ClinicalAIOrchestrator:
         if workflow_type == WorkflowType.OCR:
             if not ocr_result and request.image:
                 content_hash = await self._get_or_compute_hash(request)
+                # FIX: Removed 'specialty' argument to match OCRDependencyResolver.resolve() signature
                 ocr_result, _ = await self.ocr.resolve(
                     tenant_id=request.tenant_id,
                     encounter_id=request.encounter_id,
@@ -217,13 +197,22 @@ class ClinicalAIOrchestrator:
             return (ocr_result or {"raw_text": raw_text or ""}, warnings)
 
         elif workflow_type == WorkflowType.SOAP:
-            return await self._run_ai_workflow("soap", {"raw_text": raw_text, "language": request.language, "document_id": request.document_id, "specialty": getattr(request, "specialty", "general")}, request_id, request)
+            return await self._run_ai_workflow(
+                "soap",
+                {
+                    "raw_text": raw_text,
+                    "language": request.language,
+                    "document_id": request.document_id,
+                    "specialty": getattr(request.metadata, "specialty", "general") if request.metadata else "general",
+                },
+                request_id,
+                request,
+            )
 
         elif workflow_type == WorkflowType.ENTITIES:
             return await self._run_ai_workflow("entities", {"raw_text": raw_text, "language": request.language or "en"}, request_id, request)
 
         elif workflow_type == WorkflowType.NORMALIZATION:
-            # Get entities first if available
             entities = ctx.get("entities", [])
             variables = {"entities": entities, "raw_text": raw_text}
             return await self._run_ai_workflow("normalization", variables, request_id, request)
@@ -271,24 +260,20 @@ class ClinicalAIOrchestrator:
         """Run a direct AI model workflow."""
         warnings: List[str] = []
 
-        # Get prompt
         prompt_data = self.prompts.render_prompt(
             capability=capability,
             variables=variables,
             version=request.prompt_override,
         )
 
-        # Override model params if provided
         temperature = request.model_params.get("temperature", prompt_data["temperature"])
         max_tokens = request.model_params.get("max_tokens", prompt_data["max_tokens"])
 
-        # Build messages
         messages = build_messages(
             system=prompt_data["system"],
             user=prompt_data["user"],
         )
 
-        # Call vLLM
         response = await self.vllm.chat_completion(
             messages=messages,
             temperature=temperature,
@@ -297,33 +282,28 @@ class ClinicalAIOrchestrator:
             request_id=request_id,
         )
 
-        # Parse result
         try:
-            # Determine schema based on capability
-            schema_map = {
-                "soap": "SOAPResult",
-                "entities": "EntityResult",
-                "normalization": "NormalizationResult",
-                "summary": "SummaryResult",
-                "gaps": "GapResult",
-                "translation": "TranslationResult",
-            }
-            schema_name = schema_map.get(capability, "dict")
-
-            # Parse as generic dict for flexibility
-            from app.llm.json_repair import safe_json_loads
-            import re
             raw = response.content
-            # Strip reasoning tags e.g. <think>...</think>
-            raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL).strip()
+            
+            # FIX: Use the robust strip_thinking_tags function to handle unclosed tags, etc.
+            raw = strip_thinking_tags(raw).strip()
+            
             # Extract JSON from markdown fences if present
             fence = re.search(r'```(?:json)?\s*([\s\S]*?)```', raw)
             if fence:
                 raw = fence.group(1).strip()
+                
+            # FIX: Use robust JSON parsing (handles unescaped newlines, unbalanced braces, etc.)
             result = safe_json_loads(raw)
+            
             if result is None:
-                # Last resort: return raw text as data
+                logger.warning(
+                    f"{capability}_parse_fallback",
+                    request_id=request_id,
+                    raw_preview=raw[:500],
+                )
                 result = {"raw_text": response.content, "data": raw}
+                
             return result, warnings
 
         except Exception as e:
@@ -331,7 +311,9 @@ class ClinicalAIOrchestrator:
                 f"{capability}_parse_error",
                 error=str(e),
                 request_id=request_id,
+                exc_info=True,
             )
+            record_validation_failure(capability)
             raise
 
     async def _run_terminology_workflow(
@@ -345,10 +327,8 @@ class ClinicalAIOrchestrator:
         """Run terminology mapping workflow (SNOMED CT or ICD-11)."""
         warnings: List[str] = []
 
-        # Step 1: Normalize terms via AI
         normalized_terms = ctx.get("normalized_terms", [])
         if not normalized_terms:
-            # Run normalization first
             norm_result, _ = await self._run_ai_workflow(
                 "normalization",
                 {"raw_text": raw_text, "entities": ctx.get("entities", [])},
@@ -357,7 +337,7 @@ class ClinicalAIOrchestrator:
             )
             normalized_terms = norm_result.get("normalized_terms", [])
 
-        # Step 2: Call terminology gateway
+        # FIX: Handle cases where normalized_terms might contain strings instead of dicts
         terms = [
             t.get("normalized_text", t.get("source_text", t)) if isinstance(t, dict) else str(t) 
             for t in normalized_terms if t
@@ -390,7 +370,7 @@ class ClinicalAIOrchestrator:
             "terminology_service_available": len(candidates) > 0,
             "warning": warnings[0] if warnings else None,
         }
-        # Store candidates by system key for FHIR to pick up from context
+        
         if system == "SNOMED_CT":
             result["snomed_candidates"] = candidates
         elif system == "ICD11":
@@ -408,38 +388,35 @@ class ClinicalAIOrchestrator:
         """Run FHIR resource generation workflow."""
         warnings: List[str] = []
 
-        # Get prerequisite data - normalize soap to dict
         soap_raw = ctx.get("soap", {})
         if isinstance(soap_raw, str):
             soap = {}
         elif isinstance(soap_raw, dict):
-            # soap may be nested under "data" key
             soap = soap_raw.get("data", soap_raw)
         else:
             soap = {}
+            
         entities = ctx.get("entities", [])
         if isinstance(entities, dict):
             entities = entities.get("entities", [])
+            
         normalized_terms = ctx.get("normalized_terms", [])
         if isinstance(normalized_terms, dict):
             normalized_terms = normalized_terms.get("normalized_terms", [])
 
-        # Build variables
         variables = {
             "soap": soap,
             "entities": entities,
             "normalized_terms": normalized_terms,
             "snomed_candidates": ctx.get("snomed_candidates", []),
             "icd_candidates": ctx.get("icd_candidates", []),
-            "patient_id": request.patient_id,
+            "patient_id": getattr(request, "patient_id", None),
             "encounter_id": request.encounter_id,
         }
 
-        # Run AI workflow
         result, ai_warnings = await self._run_ai_workflow("fhir", variables, request_id, request)
         warnings.extend(ai_warnings)
 
-        # Validate FHIR resources if enabled
         if self.settings.fhir.validation_enabled:
             resources = result.get("resources", [])
             validated = []
@@ -455,7 +432,6 @@ class ClinicalAIOrchestrator:
         return result, warnings
 
     async def _load_context(self, request: ClinicalRequest) -> Dict[str, Any]:
-        """Load clinical context for encounter."""
         if not self.context:
             return {}
         return await self.context.get(
@@ -465,7 +441,6 @@ class ClinicalAIOrchestrator:
         )
 
     async def _update_context(self, request: ClinicalRequest, workflow: str, result: Dict[str, Any]) -> None:
-        """Update clinical context with workflow results."""
         if not self.context:
             return
         try:
@@ -481,7 +456,6 @@ class ClinicalAIOrchestrator:
 
     async def _log_inference(self, request: ClinicalRequest, workflow: str,
                              request_id: str, latency_ms: int) -> None:
-        """Log inference to audit trail."""
         if self.inference:
             try:
                 await self.inference.log(
@@ -497,7 +471,6 @@ class ClinicalAIOrchestrator:
                 logger.warning("inference_log_failed", error=str(e))
 
     async def _audit_log(self, request: ClinicalRequest, workflow: str, request_id: str) -> None:
-        """Write audit log entry."""
         if self.audit:
             try:
                 await self.audit.log(
@@ -511,10 +484,8 @@ class ClinicalAIOrchestrator:
                 logger.warning("audit_log_failed", error=str(e))
 
     async def _get_or_compute_hash(self, request: ClinicalRequest) -> str:
-        """Get or compute content hash for a document."""
         if request.document_id:
-            return request.document_id  # Use document_id as proxy for hash
-        # Compute hash from image data
+            return request.document_id
         if request.image:
             import hashlib
             data = request.image.encode() if isinstance(request.image, str) else request.image

@@ -13,25 +13,30 @@ logger = get_logger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 def strip_thinking_tags(raw_output: str) -> str:
-    """Removes  blocks and any preamble before the JSON."""
-    # Remove closed  ...  blocks entirely
-    cleaned = re.sub(r'<\s*think[^>]*>[\s\S]*?<\s*/\s*think\s*>', '', raw_output, flags=re.IGNORECASE)
+    """
+    Removes  blocks and any preamble before the JSON.
+    Since the model reliably ends thinking with , we split on that tag 
+    and take everything after it. This prevents thinking text containing 
+    literal '{' characters from being mistakenly parsed as JSON.
+    """
+    # 1. Find the closing  tag (case-insensitive, allows whitespace)
+    close_match = re.search(r'</\s*think\s*>', raw_output, flags=re.IGNORECASE)
     
-    # If there's still an unclosed  tag, remove everything up to the first '{'
-    if re.search(r'<\s*think[^>]*>', cleaned, flags=re.IGNORECASE):
+    if close_match:
+        # Take everything AFTER the closing tag
+        cleaned = raw_output[close_match.end():].strip()
+    else:
+        # Fallback: If no closing tag exists, remove the opening tag and everything before the first '{'
+        cleaned = re.sub(r'<\s*think[^>]*>[\s\S]*', '', raw_output, flags=re.IGNORECASE)
         start_idx = cleaned.find('{')
         if start_idx != -1:
             cleaned = cleaned[start_idx:]
-        else:
-            # No JSON found, remove the unclosed  tag and everything after it
-            cleaned = re.sub(r'<\s*think[^>]*>[\s\S]*', '', cleaned, flags=re.IGNORECASE)
             
-    # Final check: find the first '{' to ensure we start with JSON
-    start_idx = cleaned.find('{')
-    if start_idx != -1:
-        return cleaned[start_idx:]
-        
-    return cleaned
+    # 2. Remove any markdown code fences that might wrap the JSON
+    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.IGNORECASE)
+    
+    return cleaned.strip()
 
 def fix_unescaped_newlines(text: str) -> str:
     """Replace literal newlines, tabs, and carriage returns inside JSON strings with their escaped equivalents."""
@@ -46,17 +51,57 @@ def fix_unescaped_newlines(text: str) -> str:
     pattern = re.compile(r'"(?:\\.|[^"\\])*"', re.DOTALL)
     return pattern.sub(replacer, text)
 
-def extract_json_from_markdown(text: str) -> Optional[str]:
-    """Extract JSON from markdown code blocks."""
-    patterns = [
-        r"```(?:json)?\s*\n?(.*?)\n?```",
-        r"`\s*(\{.*?)\s*`",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-    return None
+def fix_unbalanced_braces(text: str) -> str:
+    """
+    Remove extra closing braces/brackets that appear outside of any open structure.
+    This fixes cases where the LLM outputs extra '}' or ']' by mistake.
+    """
+    result = []
+    depth_brace = 0
+    depth_bracket = 0
+    in_string = False
+    escape_next = False
+    
+    for char in text:
+        if escape_next:
+            result.append(char)
+            escape_next = False
+            continue
+            
+        if char == '\\':
+            result.append(char)
+            escape_next = True
+            continue
+            
+        if char == '"':
+            in_string = not in_string
+            result.append(char)
+            continue
+            
+        if in_string:
+            result.append(char)
+            continue
+            
+        if char == '{':
+            depth_brace += 1
+            result.append(char)
+        elif char == '}':
+            if depth_brace > 0:
+                depth_brace -= 1
+                result.append(char)
+            # else: extra brace, drop it
+        elif char == '[':
+            depth_bracket += 1
+            result.append(char)
+        elif char == ']':
+            if depth_bracket > 0:
+                depth_bracket -= 1
+                result.append(char)
+            # else: extra bracket, drop it
+        else:
+            result.append(char)
+            
+    return "".join(result)
 
 def extract_json_object(text: str) -> Optional[str]:
     """Extract the first JSON object from text."""
@@ -123,15 +168,7 @@ def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
     except json.JSONDecodeError:
         pass
 
-    # Strategy 2: Extract from markdown
-    extracted = extract_json_from_markdown(text)
-    if extracted:
-        try:
-            return json.loads(extracted)
-        except json.JSONDecodeError:
-            pass
-
-    # Strategy 3: Extract JSON object
+    # Strategy 2: Extract JSON object boundaries
     obj_text = extract_json_object(text)
     if obj_text:
         try:
@@ -139,16 +176,23 @@ def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
         except json.JSONDecodeError:
             pass
         
-        # Strategy 4: Repair common issues
+        # Strategy 3: Repair common issues
         repaired = repair_json_common_issues(obj_text)
         try:
             return json.loads(repaired)
         except json.JSONDecodeError:
             pass
         
-        # Strategy 5: Repair truncated JSON (close unclosed braces/brackets)
+        # Strategy 4: Repair truncated JSON (close unclosed braces/brackets)
         try:
             return _repair_truncated_json(repaired)
+        except json.JSONDecodeError:
+            pass
+            
+        # Strategy 5: Fix unbalanced braces/brackets (extra closing braces)
+        try:
+            fixed_braces = fix_unbalanced_braces(repaired)
+            return json.loads(fixed_braces)
         except json.JSONDecodeError:
             pass
 
@@ -223,6 +267,11 @@ def repair_json_output(raw_output: str) -> Optional[Dict[str, Any]]:
         pass
     try:
         return _repair_truncated_json(json_text)
+    except json.JSONDecodeError:
+        pass
+    try:
+        fixed_braces = fix_unbalanced_braces(json_text)
+        return json.loads(fixed_braces)
     except json.JSONDecodeError:
         pass
     return None
