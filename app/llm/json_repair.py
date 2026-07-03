@@ -5,6 +5,14 @@ Utilities for parsing and repairing model JSON output with fallback strategies.
 import json
 import re
 from typing import Any, Dict, Optional, Type, TypeVar
+
+# Third-party deep-structural JSON repair library (aliased to avoid any
+# confusion with this module's own name — this is NOT a self-import).
+# Handles mid-document bracket/array mismatches that our own regex-based
+# strategies below can't fix (e.g. an array closed early, causing
+# subsequent object siblings to land illegally inside array context).
+import json_repair as json_repair_lib
+
 from pydantic import BaseModel, ValidationError
 from app.core.errors import JSONRepairError, ModelOutputError
 from app.core.logging import get_logger
@@ -146,7 +154,44 @@ def _repair_truncated_json(json_text: str) -> Dict[str, Any]:
         repaired += "}"
     return json.loads(repaired)
 
-def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
+def repair_with_library(text: str, request_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """
+    Deep structural repair via the third-party json_repair library.
+
+    Use this as a fallback of last resort AFTER the cheap regex-based
+    strategies below. It is much more capable than our own bracket-counting
+    logic at fixing mid-document structural errors — e.g. an array closed
+    early, causing subsequent object key/value pairs to land illegally
+    inside array context (as opposed to simple trailing-comma or
+    unclosed-structure-at-EOF issues, which the cheaper strategies already
+    handle fine on their own).
+    """
+    try:
+        result = json_repair_lib.loads(text)
+    except Exception as e:
+        logger.warning(
+            "json_repair_library_failed",
+            request_id=request_id,
+            error=str(e),
+        )
+        return None
+
+    if isinstance(result, dict):
+        logger.info("json_repair_library_recovered", request_id=request_id)
+        return result
+
+    # json_repair.loads can return non-dict types (list, str, etc.) if the
+    # text wasn't really a JSON object at all -- treat that as a failure
+    # for our purposes rather than silently returning something the caller
+    # doesn't expect.
+    logger.warning(
+        "json_repair_library_non_dict_result",
+        request_id=request_id,
+        result_type=type(result).__name__,
+    )
+    return None
+
+def safe_json_loads(text: str, request_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Safely parse JSON with multiple fallback strategies."""
     if not text or not text.strip():
         return None
@@ -196,6 +241,15 @@ def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
         except json.JSONDecodeError:
             pass
 
+        # Strategy 6: Deep structural repair via json_repair library.
+        # Catches mid-document bracket/array mismatches (e.g. an array
+        # closed early with sibling key/value pairs left dangling outside
+        # any object) that the strategies above cannot fix, since they only
+        # operate on trailing/edge issues or global open/close counts.
+        lib_repaired = repair_with_library(obj_text, request_id=request_id)
+        if lib_repaired is not None:
+            return lib_repaired
+
     return None
 
 def _strip_thinking(text: str) -> str:
@@ -212,7 +266,7 @@ def parse_model_output(
     Parse model output into a validated Pydantic schema.
     """
     raw_output = _strip_thinking(raw_output)
-    parsed = safe_json_loads(raw_output)
+    parsed = safe_json_loads(raw_output, request_id=request_id)
     if parsed is not None:
         try:
             return schema_class(**parsed)
@@ -229,7 +283,7 @@ def parse_model_output(
 
     if allow_repair:
         logger.info("attempting_json_repair", request_id=request_id)
-        repaired = repair_json_output(raw_output)
+        repaired = repair_json_output(raw_output, request_id=request_id)
         if repaired:
             try:
                 return schema_class(**repaired)
@@ -252,7 +306,7 @@ def parse_model_output(
         request_id=request_id,
     )
 
-def repair_json_output(raw_output: str) -> Optional[Dict[str, Any]]:
+def repair_json_output(raw_output: str, request_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Attempt to repair malformed JSON output from the model."""
     cleaned = raw_output.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
@@ -274,6 +328,13 @@ def repair_json_output(raw_output: str) -> Optional[Dict[str, Any]]:
         return json.loads(fixed_braces)
     except json.JSONDecodeError:
         pass
+
+    # Deep structural repair via json_repair library -- last resort before
+    # giving up entirely and raising JSONRepairError upstream.
+    lib_repaired = repair_with_library(json_text, request_id=request_id)
+    if lib_repaired is not None:
+        return lib_repaired
+
     return None
 
 def _coerce_and_validate(data: Dict[str, Any], schema_class: Type[T]) -> T:
